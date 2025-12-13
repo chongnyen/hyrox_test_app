@@ -2,38 +2,59 @@ import streamlit as st
 import pandas as pd
 import requests
 import io
-import traceback # Import traceback for better error logging
+import traceback 
 
 # --- Configuration ---
 CDN_BASE = "https://d2wl4b7sx66tfb.cloudfront.net"
 MANIFEST_URL = f"{CDN_BASE}/manifest/latest.csv"
 
-# --- Helper Functions (Simplified for Debugging) ---
+# --- Helper Functions ---
 
 def time_to_minutes(time_str):
-    # Keep the logic simple for now, but ensure it doesn't fail on bad input
+    """Converts a time value (string, float, int, or Timedelta) into total minutes."""
     if pd.isna(time_str):
         return None
     try:
-        if isinstance(time_str, str):
-            parts = time_str.split(':')
-            if len(parts) == 2: return int(parts[0]) + float(parts[1]) / 60
-            elif len(parts) == 3: return int(parts[0]) * 60 + int(parts[1]) + float(parts[2]) / 60
+        # CRITICAL FIX: Handle Pandas Timedelta objects, which Parquet often uses for time data.
+        if isinstance(time_str, pd.Timedelta):
+            return time_str.total_seconds() / 60.0
+            
+        # If the value is already a number (float/int), assume it's already in minutes.
         if isinstance(time_str, (int, float)):
              return time_str 
+
+        # If it's a string (H:MM:SS or MM:SS)
+        if isinstance(time_str, str):
+            parts = time_str.split(':')
+            if len(parts) == 2:
+                # MM:SS format
+                return int(parts[0]) + float(parts[1]) / 60
+            elif len(parts) == 3:
+                # HH:MM:SS format
+                return int(parts[0]) * 60 + int(parts[1]) + float(parts[2]) / 60
+            
     except Exception:
         return None
     return None
 
 def minutes_to_mmss_string(minutes):
-    if pd.isna(minutes) or minutes is None or not isinstance(minutes, (int, float)):
+    """Converts total minutes (float) back to a readable MM:SS.ss string."""
+    if isinstance(minutes, pd.Series):
+        return minutes.apply(minutes_to_mmss_string)
+
+    if pd.isna(minutes) or minutes is None:
         return ""
+    
+    if not isinstance(minutes, (int, float)):
+        return ""
+
     total_seconds = minutes * 60
     m = int(total_seconds // 60)
     s = total_seconds % 60
+    
     return f"{m:02d}:{s:05.2f}"
 
-# --- Data Fetching Functions (Debugging Version) ---
+# --- Data Fetching Functions ---
 
 @st.cache_data(ttl=3600, show_spinner="Fetching race list...")
 def fetch_race_manifest():
@@ -49,86 +70,50 @@ def fetch_race_manifest():
 @st.cache_data(ttl=3600, show_spinner="Fetching race data...")
 def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_time_range=None):
     """
-    Loads data from the Parquet file, DEBUGGING TOTAL TIME COLUMN.
+    Loads data from the Parquet file on the CDN and processes it.
     """
+    
     s3_key = race_path.split("/", 4)[4] if race_path.startswith("s3://") else race_path
     data_url = f"{CDN_BASE}/{s3_key}"
 
     try:
-        # Load the data
         df = pd.read_parquet(data_url)
         
-        # Standardize column names (lowercase, snake_case)
+        # 1. Standardize column names (lowercase, snake_case)
         df.columns = df.columns.str.lower().str.replace(' ', '_').str.replace('-', '_')
         
-        # --- DEBUG STEP 1: SHOW COLUMNS ---
-        st.subheader("DEBUG MODE: RAW COLUMN NAMES")
-        st.write("Please look at the list below and identify the column that holds the final race time (e.g., 'total_time', 'time', 'finish_time', 'result').")
-        st.code(list(df.columns))
-        
-        # --- RE-APPLYING LOGIC WITH NEW DEBUGGING ---
-        
-        # 3. Define the critical renaming map for all known columns
-        rename_map = {
-            'run_time_split': 'run_time',
-            'roxzone': 'roxzone_time',
-            'ski_erg': 'ski_erg_time',
-            'sled_push': 'sled_push_time',
-            'sled_pull': 'sled_pull_time',
-            'burpee_broad_jump': 'burpee_broad_jump_time',
-            'row': 'row_time',
-            'farmers_carry': 'farmers_carry_time',
-            'sandbag_lunge': 'sandbag_lunge_time',
-            'wall_balls': 'wall_balls_time',
-            'time': 'total_time' 
-        }
-        df = df.rename(columns=rename_map, errors='ignore')
+        # 2. Define the exact time columns to convert based on the confirmed schema
+        time_cols_to_process = [
+            'total_time', 'roxzone_time', 'run_time', 'work_time', 
+        ] + [f'run_{i}' for i in range(1, 9)] + [f'work_{i}' for i in range(1, 9)]
 
-        # 3b. Defensive Check for 'total_time' (The Fix)
-        if 'total_time' not in df.columns:
-            candidate_total_time_cols = [
-                'finish_time', 'race_time', 'result_time', 'final_time', 
-                'totaltime', 'finishtime', 'racetime', 'total_race_time'
-            ]
-            
-            found_total_time = False
-            for cand_col in candidate_total_time_cols:
-                if cand_col in df.columns:
-                    df = df.rename(columns={cand_col: 'total_time'})
-                    found_total_time = True
-                    break
-            
-            if not found_total_time and 'total_time' not in df.columns:
-                # If we get here, the total time column is truly missing or unknown
-                raise KeyError("The race data is missing the required 'total_time' column after all known renaming attempts.")
-        
-        # 4. Conversion Logic
-        
-        time_cols_to_process = list(set(rename_map.values())) + ['work_time', 'total_time']
+        # 3. Conversion Logic
+        all_time_cols_converted = True
         
         for col in time_cols_to_process:
             if col in df.columns:
-                target_col = col.replace('_time', '_min') if col.endswith('_time') else f'{col}_min'
+                target_col = f'{col}_min'
                 
-                # Check if conversion fails for total_time
-                if col == 'total_time':
-                    converted_series = df[col].apply(time_to_minutes)
-                    if converted_series.isna().all():
-                        st.error(f"Debug Info: Attempted to convert 'total_time' column (now named '{col}') but all values became NaN. This means the time format is unexpected. A few samples: {df[col].head().tolist()}")
-                        raise KeyError("Conversion to 'total_time_min' failed. Data may be malformed.")
-                    df[target_col] = converted_series
-                else:
-                    df[target_col] = df[col].apply(time_to_minutes)
-
-                if df[col].dtype == object and target_col != col:
+                # Apply conversion
+                converted_series = df[col].apply(time_to_minutes)
+                
+                # CRITICAL CHECK for total_time
+                if col == 'total_time' and converted_series.isna().all():
+                    all_time_cols_converted = False
+                    st.error(f"Debug Info: Total time column ('{col}') samples: {df[col].head().tolist()}")
+                    break
+                    
+                df[target_col] = converted_series
+                
+                # Drop the original column if its type was not numeric to prevent mix-ups
+                if df[col].dtype == object:
                     df = df.drop(columns=[col])
+
+        if not all_time_cols_converted or 'total_time_min' not in df.columns:
+            raise KeyError("Conversion to 'total_time_min' failed. Data may be malformed or in an unknown time format.")
         
-        # Final check for the essential column after conversion
-        if 'total_time_min' not in df.columns:
-            raise KeyError("Conversion to 'total_time_min' failed (Post-Conversion Check).")
 
-
-        # 5. Apply filters
+        # 4. Apply filters
         df = df.dropna(subset=['total_time_min'])
 
         if gender_filter and gender_filter.lower() != 'all' and 'gender' in df.columns:
@@ -214,13 +199,11 @@ if st.button("Fetch / Refresh Race Data"):
             total_time_range=time_range
         )
 
-        # Check if the function returned a DataFrame (it will only if the Debug Step 1 passed)
         if results_df.empty:
             st.error("Could not load or process data. Check the filters and manifest.")
             st.stop()
         
         st.success(f"Successfully loaded **{len(results_df)}** entries.")
-        st.info("The DEBUG section above should show you the raw column names. This success means the renaming/conversion succeeded for this race.")
             
         # Define columns for display
         DISPLAY_TIME_MIN_COLS = [col for col in results_df.columns if col.endswith('_min')]
@@ -229,20 +212,27 @@ if st.button("Fetch / Refresh Race Data"):
         display_df = results_df.copy()
             
         for col_min in DISPLAY_TIME_MIN_COLS:
+            # Clean up the name for display (e.g., 'run_1_min' -> 'Run 1 (MM:SS.ss)')
             base_name = col_min.replace('_min', '').replace('_time', '').replace('_', ' ').title()
             display_col_name = f"{base_name} (MM:SS.ss)"
             display_df[display_col_name] = minutes_to_mmss_string(display_df[col_min]) 
             
+            # Drop the raw _min column after formatting
             display_df = display_df.drop(columns=[col_min])
             
         st.subheader("Filtered Race Results")
+        # Ensure correct column order: rank, name, then all time columns
         final_display_cols = [c for c in ['rank', 'name'] + [col for col in display_df.columns if '(MM:SS.ss)' in col] if c in display_df.columns]
         st.dataframe(display_df[final_display_cols])
             
         # --- Calculate and format the STATISTICS table ---
         st.subheader("Station Time Statistics (MM:SS.ss)")
             
-        STAT_MIN_COLS = [col for col in results_df.columns if col.endswith('_min') and col not in ['work_time_min']]
+        # Only include the work/run splits and aggregates for stats
+        STAT_MIN_COLS = [col for col in results_df.columns if col.endswith('_min')]
+        
+        # Exclude only work_time_min, as total_time_min is useful here
+        STAT_MIN_COLS = [col for col in STAT_MIN_COLS if col not in ['work_time_min']]
             
         if not STAT_MIN_COLS:
             st.warning("No time columns found to calculate statistics.")
