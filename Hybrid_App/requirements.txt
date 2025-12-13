@@ -1,3 +1,15 @@
 streamlit
 pandas
 pyarrow
+fastapi
+uvicorn
+pandas
+transformers
+peft
+accelerate
+pydantic
+# torch
+gunicorn
+chromadb
+sentence-transformers
+mlflow
