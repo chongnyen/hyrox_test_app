@@ -25,14 +25,14 @@ def time_to_minutes(time_str):
             # Assuming MM:SS format for stations
             return int(parts[0]) + int(parts[1]) / 60
         elif len(parts) == 3:
-            # Assuming HH:MM:SS format for total time
+            # Assuming HH:MM:SS format for total time (HH:MM:SS)
             return int(parts[0]) * 60 + int(parts[1]) + int(parts[2]) / 60
     except:
         return None
     return None
 
 # --- Function to Fetch Data (Mock Version - HARDCODED) ---
-@st.cache_data(ttl=7200, show_spinner=False)
+# NOTE: The @st.cache_data decorator has been REMOVED for maximum resilience.
 def fetch_mock_results(total_time_range=None):
     """
     Loads mock race results from a hardcoded string and processes time columns.
@@ -56,29 +56,29 @@ Rank,Name,Total_Time,Run_Time,Roxzone_Time,Ski_Erg_Time,Sled_Push_Time,Sled_Pull
     
     # Read the data directly from the string
     df = pd.read_csv(io.StringIO(MOCK_DATA_STRING.strip()))
-    
-    # Clean column headers
     df.columns = df.columns.str.strip() 
 
-    # Explicitly create all '_Min' columns first
-    time_col_names = list(WORK_STATION_RENAMES.keys()) + ['Total_Time', 'Run_Time', 'Roxzone_Time']
+    # --- CRITICAL FIX: EXPLICITLY CREATE THE COLUMN FOR FILTERING FIRST ---
+    # This guarantees the 'Total_Time_Min' column exists before the filter.
+    df['Total_Time_Min'] = df['Total_Time'].apply(time_to_minutes)
     
-    for col in time_col_names:
-        # Define the target column name (e.g., 'Total_Time' -> 'Total_Time_Min')
-        target_col = col.replace('_Time', '_Min') 
-        
-        # Apply the conversion function
-        df[target_col] = df[col].apply(time_to_minutes)
-        
     # Apply total time filtering
     if total_time_range and len(total_time_range) == 2:
         lower, upper = total_time_range
         
-        # 'Total_Time_Min' is guaranteed to exist here
+        # This filter must succeed now.
         df = df[
             (df['Total_Time_Min'] >= lower) & 
             (df['Total_Time_Min'] <= upper)
         ]
+
+    # --- Convert remaining time columns (RUN, ROXZONE, STATIONS) ---
+    time_col_names = ['Run_Time', 'Roxzone_Time', 'Ski_Erg_Time', 'Sled_Push_Time', 'Sled_Pull_Time', 
+                      'Burpee_Broad_Jump_Time', 'Row_Time', 'Farmers_Carry_Time', 'Sandbag_Lunge_Time', 'Wall_Balls_Time']
+    
+    for col in time_col_names:
+        target_col = col.replace('_Time', '_Min') 
+        df[target_col] = df[col].apply(time_to_minutes)
         
     return df
 
@@ -111,11 +111,12 @@ st.header("Filtered Race Results")
 if st.button("Fetch / Refresh Race Data"):
     with st.spinner(f"Fetching mock data with filters..."):
         
-        # Use a try/except block just for final resilience
+        # Use a try/except block to catch the error we know so well
         try:
             results_df = fetch_mock_results(total_time_range=time_range)
         except KeyError as e:
-            st.error(f"A critical error occurred: {e}. This should not happen with the hardcoded data.")
+            # If this error still happens, it is an extremely deep environmental/version conflict
+            st.error(f"A critical error occurred: {e}. This means the column could not be created or accessed by Pandas.")
             st.stop()
         
         st.session_state['current_results'] = results_df
@@ -125,7 +126,7 @@ if st.button("Fetch / Refresh Race Data"):
             
             # Display original time-string format columns
             display_cols = ['Rank', 'Name', 'Total_Time', 'Run_Time', 'Roxzone_Time'] + list(WORK_STATION_RENAMES.keys())
-            st.dataframe(results_df[display_cols].head(10)) 
+            st.dataframe(results_df[results_df.columns.intersection(display_cols)].head(10)) 
             
             st.subheader("Station Time Statistics (Minutes)")
             
