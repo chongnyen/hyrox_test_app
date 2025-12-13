@@ -1,144 +1,160 @@
 import streamlit as st
 import pandas as pd
-import io
-import time
+# --- CHANGE 1: Import the new helper function from the library ---
+from pyrox import PyroxClient, RaceNotFound, AthleteNotFound, PyroxError, minutes_to_mmss_string 
 
-# --- Configuration for Data Processing ---
-WORK_STATION_RENAMES = {
-    'Ski_Erg_Time': 'Ski_Erg_Min',
-    'Sled_Push_Time': 'Sled_Push_Min',
-    'Sled_Pull_Time': 'Sled_Pull_Min',
-    'Burpee_Broad_Jump_Time': 'Burpee_Broad_Jump_Min',
-    'Row_Time': 'Row_Min',
-    'Farmers_Carry_Time': 'Farmers_Carry_Min',
-    'Sandbag_Lunge_Time': 'Sandbag_Lunge_Min',
-    'Wall_Balls_Time': 'Wall_Balls_Min'
-}
+# --- Setup ---
+# Initialize the Pyrox Client (it manages its own cache in ~/.cache/pyrox)
+@st.cache_resource
+def get_pyrox_client():
+    """Create and cache the Pyrox client instance."""
+    return PyroxClient()
 
-# Helper to convert MM:SS or HH:MM:SS to total minutes
-def time_to_minutes(time_str):
-    if pd.isna(time_str):
-        return None
-    try:
-        parts = str(time_str).split(':')
-        if len(parts) == 2:
-            # Assuming MM:SS format for stations
-            return int(parts[0]) + int(parts[1]) / 60
-        elif len(parts) == 3:
-            # Assuming HH:MM:SS format for total time (HH:MM:SS)
-            return int(parts[0]) * 60 + int(parts[1]) + int(parts[2]) / 60
-    except:
-        return None
-    return None
+client = get_pyrox_client()
 
-# --- Function to Fetch Data (Mock Version - HARDCODED) ---
-# NOTE: The @st.cache_data decorator has been REMOVED for maximum resilience.
-def fetch_mock_results(total_time_range=None):
+# --- Functions to Fetch Data ---
+@st.cache_data(ttl=7200) # Cache the list for 2 hours (Pyrox manifest TTL)
+def get_race_list():
+    """Fetch the list of available races."""
+    return client.list_races()
+
+@st.cache_data(ttl=7200, show_spinner=False) # Use a custom spinner message below
+def fetch_race_results(season, location, gender, division, total_time_range=None):
     """
-    Loads mock race results from a hardcoded string and processes time columns.
+    Fetch and cache specific race results using PyroxClient.get_race().
     """
-    
-    MOCK_DATA_STRING = """
-Rank,Name,Total_Time,Run_Time,Roxzone_Time,Ski_Erg_Time,Sled_Push_Time,Sled_Pull_Time,Burpee_Broad_Jump_Time,Row_Time,Farmers_Carry_Time,Sandbag_Lunge_Time,Wall_Balls_Time
-1,Athlete A,58:34,31:12,02:10,02:45,03:30,03:20,03:15,02:40,02:55,03:10,03:37
-2,Athlete B,61:05,33:05,02:20,02:50,03:45,03:35,03:20,02:50,03:05,03:20,03:45
-3,Athlete C,63:15,34:10,02:30,02:55,04:00,03:40,03:25,03:00,03:10,03:30,03:55
-4,Athlete D,66:40,35:50,02:40,03:00,04:10,03:50,03:30,03:10,03:20,03:40,04:10
-5,Athlete E,70:25,37:30,02:50,03:05,04:25,04:00,03:35,03:20,03:30,03:50,04:15
-6,Athlete F,75:00,40:00,03:00,03:10,04:40,04:10,03:40,03:30,03:40,04:00,04:40
-7,Athlete G,80:15,42:30,03:10,03:15,04:55,04:20,03:45,03:40,03:50,04:10,05:00
-8,Athlete H,85:00,45:00,03:20,03:20,05:10,04:30,03:50,03:50,04:00,04:20,05:20
-9,Athlete I,90:00,47:30,03:30,03:25,05:25,04:40,03:55,04:00,04:10,04:30,05:40
-10,Athlete J,95:30,50:00,03:40,03:30,05:40,04:50,04:00,04:10,04:20,04:40,06:00
-"""
-    
-    time.sleep(1) # Simulate network delay
-    
-    # Read the data directly from the string
-    df = pd.read_csv(io.StringIO(MOCK_DATA_STRING.strip()))
-    df.columns = df.columns.str.strip() 
-
-    # --- CRITICAL FIX: EXPLICITLY CREATE THE COLUMN FOR FILTERING FIRST ---
-    # This guarantees the 'Total_Time_Min' column exists before the filter.
-    df['Total_Time_Min'] = df['Total_Time'].apply(time_to_minutes)
-    
-    # Apply total time filtering
     if total_time_range and len(total_time_range) == 2:
         lower, upper = total_time_range
-        
-        # This filter must succeed now.
-        df = df[
-            (df['Total_Time_Min'] >= lower) & 
-            (df['Total_Time_Min'] <= upper)
-        ]
+    else:
+        lower, upper = None, None
 
-    # --- Convert remaining time columns (RUN, ROXZONE, STATIONS) ---
-    time_col_names = ['Run_Time', 'Roxzone_Time', 'Ski_Erg_Time', 'Sled_Push_Time', 'Sled_Pull_Time', 
-                      'Burpee_Broad_Jump_Time', 'Row_Time', 'Farmers_Carry_Time', 'Sandbag_Lunge_Time', 'Wall_Balls_Time']
-    
-    for col in time_col_names:
-        target_col = col.replace('_Time', '_Min') 
-        df[target_col] = df[col].apply(time_to_minutes)
-        
-    return df
+    # Call the Pyrox core method
+    return client.get_race(
+        season=season,
+        location=location,
+        gender=gender if gender != 'All' else None,
+        division=division if division != 'All' else None,
+        total_time=(lower, upper),
+        use_cache=True
+    )
 
 # --- Streamlit UI ---
-st.title("🏋️ Hybrid Race Data Analysis (Mock Data)")
-st.caption("Deployment Test: Code is guaranteed to work, bypassing local environment issues.")
+st.title("🏋️ Pyrox Client Demo: Hyrox Data Explorer")
 
-# --- Sidebar for Filtering ---
-st.sidebar.header("Data Selection & Filters")
+# --- Sidebar for Filters ---
+st.sidebar.header("Data Filters")
 
-# We keep the UI elements for demonstration
-st.sidebar.selectbox("Select Season", options=['2024-2025 (Mock)'], index=0, key='selected_season')
-st.sidebar.selectbox("Select Location", options=['Mock Event Name'], index=0, key='selected_location')
-st.sidebar.selectbox("Select Gender", options=['All', 'Men', 'Women'], index=0, key='selected_gender')
-st.sidebar.selectbox("Select Division", options=['All', 'Pro', 'Open'], index=0, key='selected_division')
+# 1. Race Selection
+try:
+    race_manifest = get_race_list()
+    # Create combined (Season, Location) key for selection
+    race_manifest['key'] = race_manifest.apply(
+        lambda row: f"S{row['season']} - {row['location']}", axis=1
+    )
+    
+    selected_key = st.sidebar.selectbox(
+        "Select Race:",
+        race_manifest['key'].unique()
+    )
+    
+    # Parse selected key back into season and location
+    selected_row = race_manifest[race_manifest['key'] == selected_key].iloc[0]
+    selected_season = int(selected_row['season'])
+    selected_location = selected_row['location']
 
-# Total Time Filter
-time_range_placeholder = st.sidebar.slider(
-    "Total Time Range (Minutes)",
-    min_value=50, max_value=120, value=(50, 120), step=5
-)
+    st.sidebar.write(f"**Fetching:** Season {selected_season}, {selected_location}")
+    
+except PyroxError as e:
+    st.error(f"Could not load race manifest. Check CDN/network connection. Error: {e}")
+    st.stop()
 
-# Convert the selected range to a tuple for the function
-time_range = (time_range_placeholder[0], time_range_placeholder[1])
+
+# 2. Gender and Division Filters (Optional)
+GENDERS = ['All', 'Female', 'Male']
+DIVISIONS = ['All', 'Pro', 'Open', 'Doubles'] # Simplified list
+
+selected_gender = st.sidebar.selectbox("Gender Filter (Pre-fetch):", GENDERS)
+selected_division = st.sidebar.selectbox("Division Filter (Pre-fetch):", DIVISIONS)
+
+
+# 3. Total Time Filter (Post-fetch)
+st.sidebar.subheader("Total Time Range (Minutes)")
+time_min = st.sidebar.number_input("Minimum Time (Minutes):", value=None, min_value=0.0)
+time_max = st.sidebar.number_input("Maximum Time (Minutes):", value=None, min_value=0.0)
+
+time_range = None
+if time_min is not None or time_max is not None:
+    # Ensure min < max if both are provided
+    if time_min is not None and time_max is not None and time_min > time_max:
+        st.sidebar.warning("Minimum time must be less than maximum time.")
+    else:
+        time_range = (time_min, time_max)
+
+
+# --- CHANGE 2: Define the list of columns to be formatted ---
+TIME_COLUMNS = list(client.constants.WORK_STATION_RENAMES.values()) + [
+    "total_time",
+    "work_time",
+    "roxzone_time",
+    "run_time",
+]
 
 # --- Main Content ---
-st.header("Filtered Race Results")
+st.header(f"Results: {selected_key}")
+st.markdown(f"**Filters:** Gender: `{selected_gender}`, Division: `{selected_division}`")
+st.markdown(f"**Time Range:** {time_range or 'None'}")
+st.divider()
 
-# Wrap the main function call in the button
+# Fetch and Display Results
 if st.button("Fetch / Refresh Race Data"):
-    with st.spinner(f"Fetching mock data with filters..."):
-        
-        # Use a try/except block to catch the error we know so well
+    with st.spinner(f"Fetching {selected_key} with filters... (May take a moment if not cached)"):
         try:
-            results_df = fetch_mock_results(total_time_range=time_range)
-        except KeyError as e:
-            # If this error still happens, it is an extremely deep environmental/version conflict
-            st.error(f"A critical error occurred: {e}. This means the column could not be created or accessed by Pandas.")
-            st.stop()
-        
-        st.session_state['current_results'] = results_df
-        
-        if not results_df.empty:
-            st.success(f"Successfully loaded **{len(results_df)}** entries (mock data).")
+            results_df = fetch_race_results(
+                season=selected_season,
+                location=selected_location,
+                gender=selected_gender,
+                division=selected_division,
+                total_time_range=time_range
+            )
             
-            # Display original time-string format columns
-            display_cols = ['Rank', 'Name', 'Total_Time', 'Run_Time', 'Roxzone_Time'] + list(WORK_STATION_RENAMES.keys())
-            st.dataframe(results_df[results_df.columns.intersection(display_cols)].head(10)) 
+            # Save the original decimal results to the session state for further analysis 
+            st.session_state['current_results'] = results_df.copy() 
             
-            st.subheader("Station Time Statistics (Minutes)")
+            st.success(f"Successfully loaded **{len(results_df)}** entries.")
             
-            # Select relevant time columns for analysis (using the new _Min columns)
-            time_cols_min = [col.replace('_Time', '_Min') for col in display_cols if '_Time' in col]
+            # --- CHANGE 3A: Format the MAIN results table for display (Fixes limited display and decimal time) ---
+            display_df = results_df.copy() # Create a display-only copy
             
-            # Ensure we only select columns that actually exist
-            cols_for_stats = results_df.columns.intersection(time_cols_min)
+            for col in TIME_COLUMNS:
+                if col in display_df.columns:
+                    # Convert the decimal minutes to a readable MM:SS.ss string
+                    display_df[col] = minutes_to_mmss_string(display_df[col]) 
             
-            time_stats = results_df[cols_for_stats].describe(percentiles=[.50, .75]).loc[['mean', '50%', '75%']].transpose()
+            st.subheader("Full Race Results (Time in MM:SS.ss)")
+            # FIX: st.dataframe(display_df) shows the full results (no .head(10))
+            st.dataframe(display_df) 
+            
+            # --- CHANGE 3B: Calculate and format the STATISTICS table (Fixes decimal time in statistics) ---
+            st.subheader("Station Time Statistics (MM:SS.ss)")
+            
+            # Select relevant time columns for analysis (using constants mapping)
+            time_cols_for_stats = list(client.constants.WORK_STATION_RENAMES.values()) + ['total_time', 'roxzone_time']
+            time_stats = results_df[
+                results_df.columns.intersection(time_cols_for_stats)
+            ].describe(percentiles=[.50, .75]).loc[['mean', '50%', '75%']].transpose()
+            
+            # CRITICAL FIX: Format the calculated statistics columns
+            STAT_COLUMNS_TO_FORMAT = ['mean', '50%', '75%']
+            
+            for stat in STAT_COLUMNS_TO_FORMAT:
+                # FIX: Use column selection (time_stats[stat]) instead of row selection (.loc[stat])
+                time_stats[stat] = minutes_to_mmss_string(time_stats[stat])
             
             st.dataframe(time_stats)
             
-        else:
-            st.warning("No mock results found for the selected time range.")
+        except RaceNotFound:
+            st.warning(f"No results found for {selected_key} with the selected filters.")
+        except Exception as e:
+            # Re-raise the error to provide better debugging info if the 'mean' issue persists or another error occurs
+            st.error(f"An unexpected error occurred during data retrieval: {e}")
+            raise # Raise the exception to the Streamlit console for full traceback
