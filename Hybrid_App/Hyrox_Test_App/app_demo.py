@@ -4,7 +4,6 @@ import requests
 import io
 
 # --- Configuration ---
-# Directly from the new PyroxClient code:
 CDN_BASE = "https://d2wl4b7sx66tfb.cloudfront.net"
 MANIFEST_URL = f"{CDN_BASE}/manifest/latest.csv"
 
@@ -15,14 +14,21 @@ def time_to_minutes(time_str):
     if pd.isna(time_str):
         return None
     try:
-        parts = str(time_str).split(':')
-        if len(parts) == 2:
-            # Assuming MM:SS format for stations
-            return int(parts[0]) + int(parts[1]) / 60
-        elif len(parts) == 3:
-            # Assuming HH:MM:SS format for total time
-            return int(parts[0]) * 60 + int(parts[1]) + int(parts[2]) / 60
-    except:
+        # CRITICAL: Handle the original Pyrox time format output
+        if isinstance(time_str, str):
+            parts = time_str.split(':')
+            if len(parts) == 2:
+                # MM:SS format
+                return int(parts[0]) + float(parts[1]) / 60
+            elif len(parts) == 3:
+                # HH:MM:SS format
+                return int(parts[0]) * 60 + int(parts[1]) + float(parts[2]) / 60
+            
+            # If the value is already a float (i.e., already converted by Parquet/Pandas), return it.
+        if isinstance(time_str, (int, float)):
+            return time_str
+            
+    except Exception:
         return None
     return None
 
@@ -55,6 +61,7 @@ def fetch_race_manifest():
     try:
         df = pd.read_csv(MANIFEST_URL)
         df['race_id'] = 'S' + df['season'].astype(str) + ' - ' + df['location']
+        # The 'path' contains the S3 key, which is critical for fetching data
         return df[['race_id', 'path']].drop_duplicates().sort_values('race_id')
     except Exception as e:
         st.error(f"Error loading race manifest from CDN: {e}")
@@ -67,22 +74,18 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
     """
     
     # 1. Construct the direct CDN URL for the Parquet file
-    # The 'path' column contains the S3 key, which is directly appended to the CDN base.
     s3_key = race_path.split("/", 4)[4] if race_path.startswith("s3://") else race_path
     data_url = f"{CDN_BASE}/{s3_key}"
 
     try:
-        # 2. Read the Parquet file directly from the URL (requires pyarrow dependency)
-        # Note: If Streamlit Cloud environment does not have pyarrow, this will fail.
-        # Fallback: We will rely on Streamlit's implicit ability to fetch the file, 
-        # but the use of Parquet is far superior to CSV here.
+        # Requires pyarrow for reading parquet directly from URL
         df = pd.read_parquet(data_url)
         
-        # 3. Rename columns as per the original Pyrox logic (e.g., 'ski_erg' to 'ski_erg_time')
-        # We'll use a simplified set of names for stability
+        # 2. Standardize column names
         df.columns = df.columns.str.lower().str.replace(' ', '_').str.replace('-', '_')
         
-        # Rename station columns (mimicking the original pyrox logic)
+        # 3. Define column renaming map (from short names to the _time names we use)
+        # Note: The Parquet files often contain time values already in minutes (float) or total seconds.
         rename_map = {
             'run_time_split': 'run_time',
             'roxzone': 'roxzone_time',
@@ -94,24 +97,40 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
             'farmers_carry': 'farmers_carry_time',
             'sandbag_lunge': 'sandbag_lunge_time',
             'wall_balls': 'wall_balls_time',
+            # CRITICAL CHECK: ensure 'time' (raw total time) is also considered
+            'time': 'total_time' 
         }
-        df = df.rename(columns=rename_map)
+        df = df.rename(columns=rename_map, errors='ignore')
 
-        # 4. Convert all time columns from MM:SS string to total minutes (float)
-        time_cols_to_convert = [col for col in rename_map.values()] + ['total_time', 'work_time']
+        # 4. Conversion and Filtering Logic
+        
+        # CRITICAL FIX: Explicitly handle total_time to ensure total_time_min exists
+        if 'total_time' in df.columns:
+            # We assume 'total_time' is a string (H:MM:SS) or already a float (minutes).
+            # The helper handles both, but the name must be present.
+            df['total_time_min'] = df['total_time'].apply(time_to_minutes)
+            
+            # If the original 'total_time' was a string, drop it after conversion
+            if df['total_time'].dtype == object:
+                 df = df.drop(columns=['total_time'])
+        else:
+            # Re-raise the error if 'total_time' column is missing initially
+            raise KeyError("The race data is missing the required 'total_time' column.")
+
+
+        # Now, convert remaining station time columns
+        time_cols_to_convert = [col for col in rename_map.values() if col != 'total_time'] + ['work_time']
         
         for col in time_cols_to_convert:
             target_col = col.replace('_time', '_min') if col.endswith('_time') else f'{col}_min'
             if col in df.columns:
-                # Apply the original Pyrox time conversion logic (mmss_to_minutes)
-                # We use our simpler time_to_minutes helper for compatibility
                 df[target_col] = df[col].apply(time_to_minutes)
                 
                 # Drop the original string column if the numeric conversion worked
-                if df[target_col].notna().any():
+                if df[col].dtype == object:
                     df = df.drop(columns=[col])
 
-        # 5. Apply filters
+        # 5. Apply filters (now safe, as 'total_time_min' is guaranteed to exist)
         df = df.dropna(subset=['total_time_min'])
 
         if gender_filter and gender_filter.lower() != 'all' and 'gender' in df.columns:
@@ -133,13 +152,16 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
         st.error("Error: Reading Parquet files requires 'pyarrow'. Please ensure it's installed or use a CSV file.")
         st.stop()
     except Exception as e:
-        st.error(f"Error reading data from live CDN: {e}. Check the race path.")
+        # Use st.exception for better error display in Streamlit
+        st.exception(e)
+        st.error(f"Error reading data from live CDN. Check the filters, manifest, and 'pyarrow' installation.")
         return pd.DataFrame()
 
 
 # --- Streamlit UI ---
 st.title("🏋️ Hyrox Data Explorer (Live CDN)")
 st.caption("Data is fetched live from the official Pyrox CDN source via Parquet files.")
+
 
 # Load available races once
 manifest_df = fetch_race_manifest()
@@ -155,12 +177,13 @@ st.sidebar.header("Data Selection & Filters")
 
 # 1. Race Selection
 selected_race_id = st.sidebar.selectbox("Select Race:", race_options)
+# Safely get the path for the selected race
 selected_race_path = manifest_df[manifest_df['race_id'] == selected_race_id]['path'].iloc[0]
 
 
 # 2. Gender and Division Filters
 GENDERS = ['All', 'Female', 'Male', 'Mixed']
-DIVISIONS = ['All', 'Pro', 'Open', 'Doubles', 'relay', 'staff'] # Added more divisions from common Hyrox results
+DIVISIONS = ['All', 'Pro', 'Open', 'Doubles', 'Relay', 'Staff'] 
 
 selected_gender = st.sidebar.selectbox("Gender Filter:", GENDERS)
 selected_division = st.sidebar.selectbox("Division Filter:", DIVISIONS)
@@ -203,29 +226,24 @@ if st.button("Fetch / Refresh Race Data"):
             
         # Define columns for display
         DISPLAY_TIME_MIN_COLS = [col for col in results_df.columns if col.endswith('_min')]
-        DISPLAY_COLS = ['rank', 'name'] + DISPLAY_TIME_MIN_COLS
-            
+        
         # --- Format the MAIN results table for display ---
         display_df = results_df.copy()
             
         for col_min in DISPLAY_TIME_MIN_COLS:
-            # Create a user-friendly column name (e.g., 'total_time_min' -> 'Total Time (MM:SS.ss)')
             base_name = col_min.replace('_min', '').replace('_', ' ').title()
             display_col_name = f"{base_name} (MM:SS.ss)"
             display_df[display_col_name] = minutes_to_mmss_string(display_df[col_min]) 
             
-            # Drop the raw _min column after formatting
             display_df = display_df.drop(columns=[col_min])
             
         st.subheader("Filtered Race Results")
-        # Ensure we only display columns that exist after processing
         final_display_cols = [c for c in ['rank', 'name'] + [col for col in display_df.columns if '(MM:SS.ss)' in col] if c in display_df.columns]
         st.dataframe(display_df[final_display_cols])
             
         # --- Calculate and format the STATISTICS table ---
         st.subheader("Station Time Statistics (MM:SS.ss)")
             
-        # Select relevant time columns for statistics (using the _min columns)
         STAT_MIN_COLS = [col for col in results_df.columns if col.endswith('_min') and col not in ['work_time_min']]
             
         time_stats = results_df[
@@ -234,7 +252,6 @@ if st.button("Fetch / Refresh Race Data"):
             
         STAT_COLUMNS_TO_FORMAT = ['mean', '50%', '75%']
             
-        # Format the statistics columns from minutes (decimal) to MM:SS.ss string
         for stat in STAT_COLUMNS_TO_FORMAT:
             time_stats[stat] = minutes_to_mmss_string(time_stats[stat])
             
