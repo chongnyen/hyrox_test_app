@@ -8,6 +8,32 @@ import traceback
 CDN_BASE = "https://d2wl4b7sx66tfb.cloudfront.net"
 MANIFEST_URL = f"{CDN_BASE}/manifest/latest.csv"
 
+# --- Station Name Mapping (New addition for better display) ---
+STATION_NAMES_MAP = {
+    'work_1': 'Work 1 - 1000m SkiErg',
+    'work_2': 'Work 2 - 50m Sled Push',
+    'work_3': 'Work 3 - 50m Sled Pull',
+    'work_4': 'Work 4 - 80m Burpee Broad Jump',
+    'work_5': 'Work 5 - 1000m Row',
+    'work_6': 'Work 6 - 200m Farmers Carry',
+    'work_7': 'Work 7 - 100m Sandbag Lunges',
+    'work_8': 'Work 8 - Wall Balls',
+    'roxzone_time': 'Roxzone',
+    'total_time': 'Total Time',
+    'run_time': 'Total Run Time',
+    'work_time': 'Total Work Time',
+    # Map for the individual run splits if you want them in the table
+    'run_1': 'Run 1 Split',
+    'run_2': 'Run 2 Split',
+    'run_3': 'Run 3 Split',
+    'run_4': 'Run 4 Split',
+    'run_5': 'Run 5 Split',
+    'run_6': 'Run 6 Split',
+    'run_7': 'Run 7 Split',
+    'run_8': 'Run 8 Split',
+}
+
+
 # --- Helper Functions ---
 
 def time_to_minutes(time_str):
@@ -98,15 +124,16 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
                 converted_series = df[col].apply(time_to_minutes)
                 
                 # CRITICAL CHECK for total_time
-                if col == 'total_time' and converted_series.isna().all():
-                    all_time_cols_converted = False
-                    st.error(f"Debug Info: Total time column ('{col}') samples: {df[col].head().tolist()}")
-                    break
+                if col == 'total_time':
+                    # Check if all values are NaN after conversion
+                    if converted_series.isna().all() and len(converted_series) > 0:
+                        all_time_cols_converted = False
+                        break
                     
                 df[target_col] = converted_series
                 
                 # Drop the original column if its type was not numeric to prevent mix-ups
-                if df[col].dtype == object:
+                if df[col].dtype == object and target_col != col:
                     df = df.drop(columns=[col])
 
         if not all_time_cols_converted or 'total_time_min' not in df.columns:
@@ -205,15 +232,22 @@ if st.button("Fetch / Refresh Race Data"):
         
         st.success(f"Successfully loaded **{len(results_df)}** entries.")
             
-        # Define columns for display
+        # Define columns for display (all the new *_min columns)
         DISPLAY_TIME_MIN_COLS = [col for col in results_df.columns if col.endswith('_min')]
         
         # --- Format the MAIN results table for display ---
         display_df = results_df.copy()
             
         for col_min in DISPLAY_TIME_MIN_COLS:
-            # Clean up the name for display (e.g., 'run_1_min' -> 'Run 1 (MM:SS.ss)')
-            base_name = col_min.replace('_min', '').replace('_time', '').replace('_', ' ').title()
+            # Get the original column name (e.g., 'work_1')
+            original_col = col_min.replace('_min', '')
+            
+            # Look up the custom name, fall back to a cleaned version if not found
+            if original_col in STATION_NAMES_MAP:
+                base_name = STATION_NAMES_MAP[original_col]
+            else:
+                base_name = original_col.replace('_time', '').replace('_', ' ').title()
+                
             display_col_name = f"{base_name} (MM:SS.ss)"
             display_df[display_col_name] = minutes_to_mmss_string(display_df[col_min]) 
             
@@ -228,7 +262,6 @@ if st.button("Fetch / Refresh Race Data"):
         # --- Calculate and format the STATISTICS table ---
         st.subheader("Station Time Statistics (MM:SS.ss)")
             
-        # Only include the work/run splits and aggregates for stats
         STAT_MIN_COLS = [col for col in results_df.columns if col.endswith('_min')]
         
         # Exclude only work_time_min, as total_time_min is useful here
@@ -240,6 +273,10 @@ if st.button("Fetch / Refresh Race Data"):
             time_stats = results_df[
                 results_df.columns.intersection(STAT_MIN_COLS)
             ].describe(percentiles=[.50, .75]).loc[['mean', '50%', '75%']].transpose()
+            
+            # Rename the index of the statistics table using the map
+            stats_index_map = {f'{k}_min': v for k, v in STATION_NAMES_MAP.items() if f'{k}_min' in time_stats.index}
+            time_stats = time_stats.rename(index=stats_index_map)
                 
             STAT_COLUMNS_TO_FORMAT = ['mean', '50%', '75%']
                 
