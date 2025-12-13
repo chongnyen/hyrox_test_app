@@ -121,7 +121,6 @@ def calculate_athlete_profile(km_time_min, body_weight_kg, trapbar_7rm_kg, four_
     """
     Classifies the athlete based on benchmark tests and returns a profile.
     
-    SCORING STANDARDS ARE UNCHANGED.
     PROFILE CLASSIFICATION LOGIC IS UPDATED TO REFLECT RUNNING DOMINANCE (SSAC REPORT).
     """
     
@@ -142,15 +141,18 @@ def calculate_athlete_profile(km_time_min, body_weight_kg, trapbar_7rm_kg, four_
     explosive_score = np.interp(vert_jump_cm, [20, 45, 70], [0, 50, 100])
     explosive_score = np.clip(explosive_score, 0, 100)
 
-    # Determine Profile (ADJUSTED LOGIC)
+    # Determine Profile (ADJUSTED LOGIC based on SSAC report: Running is paramount)
     score_diff = strength_score - aerobic_score
 
-    # SSAC Integration: Need a >40 point strength advantage to overcome a running deficit.
-    if score_diff > 40: # Strength is significantly higher
+    # To be a Powerhouse, the strength advantage must be significantly large (>40 points) 
+    # to compensate for the running deficit.
+    if score_diff > 40:
         profile = "Powerhouse 🏋️"
-    elif score_diff < -30: # Aerobic is significantly higher
+    # To be a Runner, the aerobic advantage only needs to be moderately large (<-30 points)
+    elif score_diff < -30:
         profile = "Runner 🏃"
-    else: # Scores are balanced (-30 to +40)
+    # Hybrid is the wide band in the middle (-30 to +40)
+    else:
         profile = "Hybrid ✨"
 
     return {
@@ -201,7 +203,7 @@ def generate_pacing_and_feedback(profile_data):
         
     return report
 
-# --- UI Tab Functions (Data Explorer & Training Plans are unchanged) ---
+# --- UI Tab Functions ---
 
 def data_explorer_tab(manifest_df):
     """The original data fetching and display functionality."""
@@ -305,20 +307,25 @@ def assessment_tab():
         
         with col_run:
             st.markdown("#### 🏃 Aerobic/Explosive Capacity")
-            st.session_state.km_time_str = st.text_input("5km Run Time (MM:SS):", value="25:00", help="Time conversion assumes a constant race pace for HYROX run splits.", key='km_time_str')
-            st.session_state.vert_jump_cm = st.number_input("Vertical Jump (cm):", value=45.0, min_value=0.0, help="Explosive power is crucial for Burpee Broad Jumps.", key='vert_jump_cm')
+            # FIX: Removed the direct assignment to st.session_state
+            st.text_input("5km Run Time (MM:SS):", value="25:00", help="Time conversion assumes a constant race pace for HYROX run splits.", key='km_time_str')
+            st.number_input("Vertical Jump (cm):", value=45.0, min_value=0.0, help="Explosive power is crucial for Burpee Broad Jumps.", key='vert_jump_cm')
 
         with col_strength:
             st.markdown("#### 💪 Strength/Endurance Metrics")
-            st.session_state.body_weight_kg = st.number_input("Body Weight (kg):", value=80.0, min_value=1.0, help="Used to calculate relative strength.", key='body_weight_kg')
-            st.session_state.trapbar_7rm_kg = st.number_input("TrapBar Squat 7RM (kg):", value=130.0, min_value=1.0, help="Maximal strength model for Sleds.", key='trapbar_7rm_kg')
-            st.session_state.four_min_work_reps = st.number_input("4-Minute Max Work (Total Reps):", value=100, min_value=0, help="Max work capacity over 4 minutes (e.g., AMRAP of a low-rep complex).", key='four_min_work_reps')
+            # FIX: Removed the direct assignment to st.session_state
+            st.number_input("Body Weight (kg):", value=80.0, min_value=1.0, help="Used to calculate relative strength.", key='body_weight_kg')
+            st.number_input("TrapBar Squat 7RM (kg):", value=130.0, min_value=1.0, help="Maximal strength model for Sleds.", key='trapbar_7rm_kg')
+            st.number_input("4-Minute Max Work (Total Reps):", value=100, min_value=0, help="Max work capacity over 4 minutes (e.g., AMRAP of a low-rep complex).", key='four_min_work_reps')
 
         # --- Report Button ---
         if st.button("Generate Athlete Report Card", type="primary"):
             try:
+                # Access the values directly from session state (which is correct)
+                km_time_str = st.session_state.km_time_str
+                
                 # Convert 5km time string to minutes
-                km_time_parts = st.session_state.km_time_str.split(':')
+                km_time_parts = km_time_str.split(':')
                 if len(km_time_parts) == 2:
                     km_time_min = int(km_time_parts[0]) + float(km_time_parts[1]) / 60
                 else:
@@ -349,6 +356,7 @@ def assessment_tab():
 
             except Exception as e:
                 st.error(f"Error generating report: Ensure all fields are correctly filled. Detail: {e}")
+
 
 def training_plans_tab():
     """Tailored training plan recommendations based on profile."""
