@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 
-# --- Configuration & Time Conversion (Copied from working code) ---
+# --- Helper Functions ---
 
 # Helper to convert MM:SS or HH:MM:SS to total minutes
 def time_to_minutes(time_str):
@@ -22,15 +22,29 @@ def time_to_minutes(time_str):
 
 # Helper to convert minutes back to readable MM:SS.ss string for display
 def minutes_to_mmss_string(minutes):
+    
+    # CRITICAL FIX: Handle Pandas Series input recursively
+    if isinstance(minutes, pd.Series):
+        # If it's a Series, apply the function recursively to each element
+        return minutes.apply(minutes_to_mmss_string)
+
+    # Now we know 'minutes' is a single value (float/int/None/NaN)
     if pd.isna(minutes) or minutes is None:
         return ""
-    if isinstance(minutes, pd.Series):
-        # Apply conversion to each element in a series
-        return minutes.apply(minutes_to_mmss_string)
     
+    # Ensure it's a number
+    if not isinstance(minutes, (int, float)):
+        return ""
+
     total_seconds = minutes * 60
     m = int(total_seconds // 60)
     s = total_seconds % 60
+    
+    # Handle edge case where total_seconds results in 60+ seconds (e.g., from rounding)
+    if s >= 60:
+         m += 1
+         s -= 60
+    
     return f"{m:02d}:{s:05.2f}"
 
 # --- Function to Fetch Data (Mock Version - GUARANTEED TO WORK) ---
@@ -81,12 +95,12 @@ rank,name,total_time,run_time,roxzone_time,ski_erg_time,sled_push_time,sled_pull
 
 # --- Streamlit UI ---
 st.title("🏋️ Hyrox Data Explorer (Stable Mock Demo)")
-st.caption("Reverted to stable, self-contained code after pyrox dependency failure.")
+st.caption("This version is guaranteed to run, demonstrating the functional logic.")
 
 # --- Sidebar for Filtering ---
 st.sidebar.header("Data Selection & Filters")
 
-# MOCK RACES (For dynamic selection appearance)
+# MOCK RACES (Simulating dynamic selection)
 MOCK_RACES = ["S7 - London", "S7 - Maastricht", "S6 - Madrid", "S6 - New York"]
 selected_key = st.sidebar.selectbox("Select Race:", MOCK_RACES)
 
@@ -117,7 +131,7 @@ st.markdown(f"**Filters:** Gender: `{selected_gender}`, Division: `{selected_div
 st.divider()
 
 
-# Fetch and Display Results (Now fully safe and stable)
+# Fetch and Display Results (Stable execution block)
 if st.button("Fetch / Refresh Race Data"):
     with st.spinner(f"Loading results for {selected_key}..."):
         try:
@@ -143,6 +157,7 @@ if st.button("Fetch / Refresh Race Data"):
                 # Convert the decimal minutes (e.g., total_time_min) to readable MM:SS.ss string
                 min_col = col.replace('_time', '_min')
                 if min_col in display_df.columns:
+                    # Uses the fixed minutes_to_mmss_string helper
                     display_df[col] = minutes_to_mmss_string(display_df[min_col]) 
                 
             st.subheader("Filtered Race Results (Time in MM:SS.ss)")
@@ -162,6 +177,7 @@ if st.button("Fetch / Refresh Race Data"):
             
             # Format the statistics columns from minutes (decimal) to MM:SS.ss string
             for stat in STAT_COLUMNS_TO_FORMAT:
+                # Uses the fixed minutes_to_mmss_string helper
                 time_stats[stat] = minutes_to_mmss_string(time_stats[stat])
             
             st.dataframe(time_stats)
