@@ -31,6 +31,7 @@ STATION_NAMES_MAP = {
     'run_5': 'Run 5 Split', 'run_6': 'Run 6 Split', 'run_7': 'Run 7 Split', 'run_8': 'Run 8 Split',
 }
 
+
 # --- Helper Functions (Time Conversion) ---
 
 def time_to_minutes(time_str):
@@ -59,7 +60,7 @@ def minutes_to_mmss_string(minutes):
     s = total_seconds % 60
     return f"{m:02d}:{s:05.2f}"
 
-# --- Data Fetching Functions ---
+# --- Data Fetching Functions (Unchanged) ---
 
 @st.cache_data(ttl=3600, show_spinner="Fetching race list...")
 def fetch_race_manifest():
@@ -114,46 +115,42 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
         return pd.DataFrame()
 
 
-# --- Assessment Logic (New Core Feature) ---
+# --- Assessment Logic (Updated with SSAC Weighting) ---
 
 def calculate_athlete_profile(km_time_min, body_weight_kg, trapbar_7rm_kg, four_min_work_reps, vert_jump_cm):
     """
-    Classifies the athlete based on benchmark tests and returns a profile (Runner, Powerhouse, Hybrid).
+    Classifies the athlete based on benchmark tests and returns a profile.
     
-    This logic standardizes scores (0-100) based on assumed HYROX-relevant standards.
+    SCORING STANDARDS ARE UNCHANGED.
+    PROFILE CLASSIFICATION LOGIC IS UPDATED TO REFLECT RUNNING DOMINANCE (SSAC REPORT).
     """
     
-    # 1. Aerobic Capacity Score (5km Time) -> Runner / Total Run Time
-    # Standard: Elite (<17m) = 100, Average (28m) = 50, Weak (>35m) = 0
-    # Min/Max for scoring: 17 mins (100 pts) to 35 mins (0 pts)
+    # 1. Aerobic Capacity Score (5km Time)
     aerobic_score = np.interp(km_time_min, [17, 28, 35], [100, 50, 0])
     aerobic_score = np.clip(aerobic_score, 0, 100)
 
-    # 2. Strength Score (TrapBar 7RM) -> Powerhouse / Sleds
-    # Standard: Relative Strength (7RM/BW): Elite (>2.2x) = 100, Average (1.5x) = 50, Weak (<1.0x) = 0
+    # 2. Strength Score (TrapBar 7RM)
     relative_strength = trapbar_7rm_kg / body_weight_kg
     strength_score = np.interp(relative_strength, [1.0, 1.5, 2.2], [0, 50, 100])
     strength_score = np.clip(strength_score, 0, 100)
 
-    # 3. Power Endurance Score (4-Minute Max Work) -> Hybrid / High-Variability Stations
-    # This is a general work capacity metric. 
-    # Standard (Reps/Score): Elite (>150) = 100, Average (100) = 50, Weak (<50) = 0
+    # 3. Power Endurance Score (4-Minute Max Work)
     power_endurance_score = np.interp(four_min_work_reps, [50, 100, 150], [0, 50, 100])
     power_endurance_score = np.clip(power_endurance_score, 0, 100)
 
-    # 4. Explosive Power Score (Vertical Jump) -> Burpee Broad Jump / Sandbag Lunges
-    # Standard (cm): Elite (>70cm) = 100, Average (45cm) = 50, Weak (<20cm) = 0
+    # 4. Explosive Power Score (Vertical Jump)
     explosive_score = np.interp(vert_jump_cm, [20, 45, 70], [0, 50, 100])
     explosive_score = np.clip(explosive_score, 0, 100)
 
-    # Determine Profile
+    # Determine Profile (ADJUSTED LOGIC)
     score_diff = strength_score - aerobic_score
 
-    if score_diff > 30: # Strength is significantly higher
+    # SSAC Integration: Need a >40 point strength advantage to overcome a running deficit.
+    if score_diff > 40: # Strength is significantly higher
         profile = "Powerhouse 🏋️"
     elif score_diff < -30: # Aerobic is significantly higher
         profile = "Runner 🏃"
-    else: # Scores are balanced
+    else: # Scores are balanced (-30 to +40)
         profile = "Hybrid ✨"
 
     return {
@@ -180,7 +177,7 @@ def generate_pacing_and_feedback(profile_data):
     # --- Profile-Specific Feedback ---
     if profile == "Runner 🏃":
         report += "#### 🎯 Run Pacing Chart & Strategy:\n"
-        report += "Your **Aerobic Capacity (Score: {aerobic:.0f})** is your greatest weapon. You can maintain a faster pace on the run splits and recover better in the Roxzone.\n\n"
+        report += f"Your **Aerobic Capacity (Score: {aerobic:.0f})** is your greatest weapon. **(SSAC Validation: Running is the most dominant factor in total time.)** You can maintain a faster pace on the run splits and recover better in the Roxzone.\n\n"
         report += "**Run Pacing Advice:** Aim for a consistent, controlled pace (RPE 7/10) on runs 1-4. Do **NOT** redline the final runs. Use runs 5-8 as strategic recovery after your weakness stations.\n\n"
         report += "#### ⚠️ Predicted Weaknesses (Training Focus):\n"
         report += f"- **Maximal Strength (Score: {strength:.0f}):** Focus on the **Sled Push** and **Sled Pull**. These stations will be your biggest time-sinks. Training should prioritize high-weight, low-rep sets, and heavy compound lifts.\n"
@@ -188,8 +185,8 @@ def generate_pacing_and_feedback(profile_data):
 
     elif profile == "Powerhouse 🏋️":
         report += "#### 🎯 Run Pacing Chart & Strategy:\n"
-        report += "Your **Maximal Strength (Score: {strength:.0f})** is elite, allowing you to crush the sleds and other strength stations. This means you will spend less time working on the floor.\n\n"
-        report += "**Run Pacing Advice:** Run splits are your biggest challenge. Aim for a **conservative, recovery pace** (RPE 5/10) on all 8 runs. Use the first run to settle in and do **NOT** try to bank time on the run. Preserve your legs for the next station.\n\n"
+        report += f"Your **Maximal Strength (Score: {strength:.0f})** is elite, allowing you to crush the sleds and other strength stations. This means you will spend less time working on the floor.\n\n"
+        report += "**Run Pacing Advice:** Run splits are your biggest challenge. **(SSAC Validation: Low Aerobic Capacity is the biggest limiter for strength-focused athletes.)** Aim for a **conservative, recovery pace** (RPE 5/10) on all 8 runs. Use the first run to settle in and do **NOT** try to bank time on the run. Preserve your legs for the next station.\n\n"
         report += "#### ⚠️ Predicted Weaknesses (Training Focus):\n"
         report += f"- **Aerobic Capacity (Score: {aerobic:.0f}):** Your total run time is your major limiter. Dedicate specific sessions to Zone 2 heart rate training (long, slow distance) to increase running economy.\n"
         report += f"- **Roxzone/Transition:** Strength athletes often spend too much time recovering. Practice quick transitions to minimize Roxzone time, which is crucial for saving total minutes.\n"
@@ -204,7 +201,7 @@ def generate_pacing_and_feedback(profile_data):
         
     return report
 
-# --- UI Tab Functions ---
+# --- UI Tab Functions (Data Explorer & Training Plans are unchanged) ---
 
 def data_explorer_tab(manifest_df):
     """The original data fetching and display functionality."""
@@ -308,14 +305,14 @@ def assessment_tab():
         
         with col_run:
             st.markdown("#### 🏃 Aerobic/Explosive Capacity")
-            st.session_state.km_time_str = st.text_input("5km Run Time (MM:SS):", value="25:00", help="Time conversion assumes a constant race pace for HYROX run splits.")
-            st.session_state.vert_jump_cm = st.number_input("Vertical Jump (cm):", value=45.0, min_value=0.0, help="Explosive power is crucial for Burpee Broad Jumps.")
+            st.session_state.km_time_str = st.text_input("5km Run Time (MM:SS):", value="25:00", help="Time conversion assumes a constant race pace for HYROX run splits.", key='km_time_str')
+            st.session_state.vert_jump_cm = st.number_input("Vertical Jump (cm):", value=45.0, min_value=0.0, help="Explosive power is crucial for Burpee Broad Jumps.", key='vert_jump_cm')
 
         with col_strength:
             st.markdown("#### 💪 Strength/Endurance Metrics")
-            st.session_state.body_weight_kg = st.number_input("Body Weight (kg):", value=80.0, min_value=1.0, help="Used to calculate relative strength.")
-            st.session_state.trapbar_7rm_kg = st.number_input("TrapBar Squat 7RM (kg):", value=130.0, min_value=1.0, help="Maximal strength model for Sleds.")
-            st.session_state.four_min_work_reps = st.number_input("4-Minute Max Work (Total Reps):", value=100, min_value=0, help="Max work capacity over 4 minutes (e.g., AMRAP of a low-rep complex).")
+            st.session_state.body_weight_kg = st.number_input("Body Weight (kg):", value=80.0, min_value=1.0, help="Used to calculate relative strength.", key='body_weight_kg')
+            st.session_state.trapbar_7rm_kg = st.number_input("TrapBar Squat 7RM (kg):", value=130.0, min_value=1.0, help="Maximal strength model for Sleds.", key='trapbar_7rm_kg')
+            st.session_state.four_min_work_reps = st.number_input("4-Minute Max Work (Total Reps):", value=100, min_value=0, help="Max work capacity over 4 minutes (e.g., AMRAP of a low-rep complex).", key='four_min_work_reps')
 
         # --- Report Button ---
         if st.button("Generate Athlete Report Card", type="primary"):
