@@ -14,7 +14,11 @@ def time_to_minutes(time_str):
     if pd.isna(time_str):
         return None
     try:
-        # CRITICAL: Handle the original Pyrox time format output
+        # If the value is already a number (minutes/seconds/timedelta object), return it converted to minutes.
+        if isinstance(time_str, (int, float)):
+             return time_str / 60.0 if time_str > 1000 and time_str > 10000 else time_str # Crude guess if seconds vs minutes
+
+        # If it's a string (H:MM:SS or MM:SS)
         if isinstance(time_str, str):
             parts = time_str.split(':')
             if len(parts) == 2:
@@ -23,10 +27,6 @@ def time_to_minutes(time_str):
             elif len(parts) == 3:
                 # HH:MM:SS format
                 return int(parts[0]) * 60 + int(parts[1]) + float(parts[2]) / 60
-            
-            # If the value is already a float (i.e., already converted by Parquet/Pandas), return it.
-        if isinstance(time_str, (int, float)):
-            return time_str
             
     except Exception:
         return None
@@ -61,7 +61,6 @@ def fetch_race_manifest():
     try:
         df = pd.read_csv(MANIFEST_URL)
         df['race_id'] = 'S' + df['season'].astype(str) + ' - ' + df['location']
-        # The 'path' contains the S3 key, which is critical for fetching data
         return df[['race_id', 'path']].drop_duplicates().sort_values('race_id')
     except Exception as e:
         st.error(f"Error loading race manifest from CDN: {e}")
@@ -70,7 +69,7 @@ def fetch_race_manifest():
 @st.cache_data(ttl=3600, show_spinner="Fetching race data...")
 def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_time_range=None):
     """
-    Loads data from the Parquet file on the CDN and applies filters.
+    Loads data from the Parquet file on the CDN and processes it.
     """
     
     # 1. Construct the direct CDN URL for the Parquet file
@@ -78,14 +77,13 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
     data_url = f"{CDN_BASE}/{s3_key}"
 
     try:
-        # Requires pyarrow for reading parquet directly from URL
         df = pd.read_parquet(data_url)
         
-        # 2. Standardize column names
+        # 2. Standardize column names (lowercase, replace spaces/hyphens with underscores)
         df.columns = df.columns.str.lower().str.replace(' ', '_').str.replace('-', '_')
         
-        # 3. Define column renaming map (from short names to the _time names we use)
-        # Note: The Parquet files often contain time values already in minutes (float) or total seconds.
+        # 3. Define the critical renaming map for station columns
+        # These are the columns the user expects to see.
         rename_map = {
             'run_time_split': 'run_time',
             'roxzone': 'roxzone_time',
@@ -97,38 +95,31 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
             'farmers_carry': 'farmers_carry_time',
             'sandbag_lunge': 'sandbag_lunge_time',
             'wall_balls': 'wall_balls_time',
-            # CRITICAL CHECK: ensure 'time' (raw total time) is also considered
-            'time': 'total_time' 
+            'time': 'total_time' # Total race time might be named just 'time'
         }
         df = df.rename(columns=rename_map, errors='ignore')
 
-        # 4. Conversion and Filtering Logic
+        # 4. Conversion Logic (CRITICAL FIX applied here)
         
-        # CRITICAL FIX: Explicitly handle total_time to ensure total_time_min exists
-        if 'total_time' in df.columns:
-            # We assume 'total_time' is a string (H:MM:SS) or already a float (minutes).
-            # The helper handles both, but the name must be present.
-            df['total_time_min'] = df['total_time'].apply(time_to_minutes)
-            
-            # If the original 'total_time' was a string, drop it after conversion
-            if df['total_time'].dtype == object:
-                 df = df.drop(columns=['total_time'])
-        else:
-            # Re-raise the error if 'total_time' column is missing initially
-            raise KeyError("The race data is missing the required 'total_time' column.")
-
-
-        # Now, convert remaining station time columns
-        time_cols_to_convert = [col for col in rename_map.values() if col != 'total_time'] + ['work_time']
+        # List of all time columns we need to process (now using the target names from the map)
+        time_cols_to_process = list(set(rename_map.values())) + ['work_time']
         
-        for col in time_cols_to_convert:
-            target_col = col.replace('_time', '_min') if col.endswith('_time') else f'{col}_min'
+        for col in time_cols_to_process:
             if col in df.columns:
+                # Determine the target column name (e.g., 'total_time' -> 'total_time_min')
+                target_col = col.replace('_time', '_min') if col.endswith('_time') else f'{col}_min'
+                
+                # Apply conversion
                 df[target_col] = df[col].apply(time_to_minutes)
                 
-                # Drop the original string column if the numeric conversion worked
-                if df[col].dtype == object:
+                # If the original column was a string (object dtype), drop it to avoid confusion.
+                if df[col].dtype == object and target_col != col:
                     df = df.drop(columns=[col])
+        
+        # Final check for the essential column
+        if 'total_time_min' not in df.columns:
+            # This handles cases where 'time' was not present or the conversion failed dramatically
+            raise KeyError("The race data is missing the required 'total_time' column or conversion failed.")
 
         # 5. Apply filters (now safe, as 'total_time_min' is guaranteed to exist)
         df = df.dropna(subset=['total_time_min'])
@@ -149,12 +140,12 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
         return df.reset_index(drop=True)
 
     except ImportError:
-        st.error("Error: Reading Parquet files requires 'pyarrow'. Please ensure it's installed or use a CSV file.")
+        st.error("Error: Reading Parquet files requires 'pyarrow'. Please ensure it's installed.")
         st.stop()
     except Exception as e:
         # Use st.exception for better error display in Streamlit
         st.exception(e)
-        st.error(f"Error reading data from live CDN. Check the filters, manifest, and 'pyarrow' installation.")
+        st.error(f"Error reading data from live CDN. Check the filters, manifest, or that 'pyarrow' is in your requirements.txt.")
         return pd.DataFrame()
 
 
@@ -177,7 +168,6 @@ st.sidebar.header("Data Selection & Filters")
 
 # 1. Race Selection
 selected_race_id = st.sidebar.selectbox("Select Race:", race_options)
-# Safely get the path for the selected race
 selected_race_path = manifest_df[manifest_df['race_id'] == selected_race_id]['path'].iloc[0]
 
 
@@ -231,10 +221,12 @@ if st.button("Fetch / Refresh Race Data"):
         display_df = results_df.copy()
             
         for col_min in DISPLAY_TIME_MIN_COLS:
-            base_name = col_min.replace('_min', '').replace('_', ' ').title()
+            # Clean up the name for display (e.g., 'ski_erg_time_min' -> 'Ski Erg (MM:SS.ss)')
+            base_name = col_min.replace('_min', '').replace('_time', '').replace('_', ' ').title()
             display_col_name = f"{base_name} (MM:SS.ss)"
             display_df[display_col_name] = minutes_to_mmss_string(display_df[col_min]) 
             
+            # Drop the raw _min column after formatting
             display_df = display_df.drop(columns=[col_min])
             
         st.subheader("Filtered Race Results")
@@ -245,6 +237,10 @@ if st.button("Fetch / Refresh Race Data"):
         st.subheader("Station Time Statistics (MM:SS.ss)")
             
         STAT_MIN_COLS = [col for col in results_df.columns if col.endswith('_min') and col not in ['work_time_min']]
+            
+        if not STAT_MIN_COLS:
+            st.warning("No time columns found to calculate statistics.")
+            st.stop()
             
         time_stats = results_df[
             results_df.columns.intersection(STAT_MIN_COLS)
