@@ -1,6 +1,12 @@
 import streamlit as st
 import pandas as pd
+import requests
 import io
+
+# --- Configuration ---
+# Directly from the new PyroxClient code:
+CDN_BASE = "https://d2wl4b7sx66tfb.cloudfront.net"
+MANIFEST_URL = f"{CDN_BASE}/manifest/latest.csv"
 
 # --- Helper Functions ---
 
@@ -14,7 +20,7 @@ def time_to_minutes(time_str):
             # Assuming MM:SS format for stations
             return int(parts[0]) + int(parts[1]) / 60
         elif len(parts) == 3:
-            # Assuming HH:MM:SS format for total time (HH:MM:SS)
+            # Assuming HH:MM:SS format for total time
             return int(parts[0]) * 60 + int(parts[1]) + int(parts[2]) / 60
     except:
         return None
@@ -22,17 +28,12 @@ def time_to_minutes(time_str):
 
 # Helper to convert minutes back to readable MM:SS.ss string for display
 def minutes_to_mmss_string(minutes):
-    
-    # CRITICAL FIX: Handle Pandas Series input recursively
     if isinstance(minutes, pd.Series):
-        # If it's a Series, apply the function recursively to each element
         return minutes.apply(minutes_to_mmss_string)
 
-    # Now we know 'minutes' is a single value (float/int/None/NaN)
     if pd.isna(minutes) or minutes is None:
         return ""
     
-    # Ensure it's a number
     if not isinstance(minutes, (int, float)):
         return ""
 
@@ -40,73 +41,126 @@ def minutes_to_mmss_string(minutes):
     m = int(total_seconds // 60)
     s = total_seconds % 60
     
-    # Handle edge case where total_seconds results in 60+ seconds (e.g., from rounding)
     if s >= 60:
          m += 1
          s -= 60
     
     return f"{m:02d}:{s:05.2f}"
 
-# --- Function to Fetch Data (Mock Version - GUARANTEED TO WORK) ---
+# --- Data Fetching Functions (Using CDN Strategy) ---
 
-def fetch_mock_results(total_time_range=None):
+@st.cache_data(ttl=3600, show_spinner="Fetching race list...")
+def fetch_race_manifest():
+    """Loads the manifest CSV from the CDN to get a list of all races."""
+    try:
+        df = pd.read_csv(MANIFEST_URL)
+        df['race_id'] = 'S' + df['season'].astype(str) + ' - ' + df['location']
+        return df[['race_id', 'path']].drop_duplicates().sort_values('race_id')
+    except Exception as e:
+        st.error(f"Error loading race manifest from CDN: {e}")
+        return pd.DataFrame()
+
+@st.cache_data(ttl=3600, show_spinner="Fetching race data...")
+def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_time_range=None):
     """
-    Loads mock race results from a hardcoded string and processes time columns.
+    Loads data from the Parquet file on the CDN and applies filters.
     """
     
-    # Using snake_case for consistency with common DataFrame practice
-    MOCK_DATA_STRING = """
-rank,name,total_time,run_time,roxzone_time,ski_erg_time,sled_push_time,sled_pull_time,burpee_broad_jump_time,row_time,farmers_carry_time,sandbag_lunge_time,wall_balls_time
-1,Athlete A,58:34,31:12,02:10,02:45,03:30,03:20,03:15,02:40,02:55,03:10,03:37
-2,Athlete B,61:05,33:05,02:20,02:50,03:45,03:35,03:20,02:50,03:05,03:20,03:45
-3,Athlete C,63:15,34:10,02:30,02:55,04:00,03:40,03:25,03:00,03:10,03:30,03:55
-4,Athlete D,66:40,35:50,02:40,03:00,04:10,03:50,03:30,03:10,03:20,03:40,04:10
-5,Athlete E,70:25,37:30,02:50,03:05,04:25,04:00,03:35,03:20,03:30,03:50,04:15
-6,Athlete F,75:00,40:00,03:00,03:10,04:40,04:10,03:40,03:30,03:40,04:00,04:40
-7,Athlete G,80:15,42:30,03:10,03:15,04:55,04:20,03:45,03:40,03:50,04:10,05:00
-8,Athlete H,85:00,45:00,03:20,03:20,05:10,04:30,03:50,03:50,04:00,04:20,05:20
-9,Athlete I,90:00,47:30,03:30,03:25,05:25,04:40,03:55,04:00,04:10,04:30,05:40
-10,Athlete J,95:30,50:00,03:40,03:30,05:40,04:50,04:00,04:10,04:20,04:40,06:00
-"""
-    
-    df = pd.read_csv(io.StringIO(MOCK_DATA_STRING.strip()))
-    df.columns = df.columns.str.strip() 
+    # 1. Construct the direct CDN URL for the Parquet file
+    # The 'path' column contains the S3 key, which is directly appended to the CDN base.
+    s3_key = race_path.split("/", 4)[4] if race_path.startswith("s3://") else race_path
+    data_url = f"{CDN_BASE}/{s3_key}"
 
-    # 1. Convert 'total_time' to 'total_time_min' immediately.
-    df['total_time_min'] = df['total_time'].apply(time_to_minutes)
-    
-    # 2. Apply total time filtering
-    if total_time_range and len(total_time_range) == 2:
-        lower, upper = total_time_range
-        df = df[
-            (df['total_time_min'] >= lower) & 
-            (df['total_time_min'] <= upper)
-        ]
-
-    # 3. Convert remaining time columns 
-    time_cols_to_convert = ['run_time', 'roxzone_time', 'ski_erg_time', 'sled_push_time', 'sled_pull_time', 
-                      'burpee_broad_jump_time', 'row_time', 'farmers_carry_time', 'sandbag_lunge_time', 'wall_balls_time']
-    
-    for col in time_cols_to_convert:
-        target_col = col.replace('_time', '_min') 
-        df[target_col] = df[col].apply(time_to_minutes)
+    try:
+        # 2. Read the Parquet file directly from the URL (requires pyarrow dependency)
+        # Note: If Streamlit Cloud environment does not have pyarrow, this will fail.
+        # Fallback: We will rely on Streamlit's implicit ability to fetch the file, 
+        # but the use of Parquet is far superior to CSV here.
+        df = pd.read_parquet(data_url)
         
-    return df
+        # 3. Rename columns as per the original Pyrox logic (e.g., 'ski_erg' to 'ski_erg_time')
+        # We'll use a simplified set of names for stability
+        df.columns = df.columns.str.lower().str.replace(' ', '_').str.replace('-', '_')
+        
+        # Rename station columns (mimicking the original pyrox logic)
+        rename_map = {
+            'run_time_split': 'run_time',
+            'roxzone': 'roxzone_time',
+            'ski_erg': 'ski_erg_time',
+            'sled_push': 'sled_push_time',
+            'sled_pull': 'sled_pull_time',
+            'burpee_broad_jump': 'burpee_broad_jump_time',
+            'row': 'row_time',
+            'farmers_carry': 'farmers_carry_time',
+            'sandbag_lunge': 'sandbag_lunge_time',
+            'wall_balls': 'wall_balls_time',
+        }
+        df = df.rename(columns=rename_map)
+
+        # 4. Convert all time columns from MM:SS string to total minutes (float)
+        time_cols_to_convert = [col for col in rename_map.values()] + ['total_time', 'work_time']
+        
+        for col in time_cols_to_convert:
+            target_col = col.replace('_time', '_min') if col.endswith('_time') else f'{col}_min'
+            if col in df.columns:
+                # Apply the original Pyrox time conversion logic (mmss_to_minutes)
+                # We use our simpler time_to_minutes helper for compatibility
+                df[target_col] = df[col].apply(time_to_minutes)
+                
+                # Drop the original string column if the numeric conversion worked
+                if df[target_col].notna().any():
+                    df = df.drop(columns=[col])
+
+        # 5. Apply filters
+        df = df.dropna(subset=['total_time_min'])
+
+        if gender_filter and gender_filter.lower() != 'all' and 'gender' in df.columns:
+            df = df[df['gender'].str.casefold() == gender_filter.lower()]
+            
+        if division_filter and division_filter.lower() != 'all' and 'division' in df.columns:
+            df = df[df['division'].str.casefold() == division_filter.lower()]
+            
+        if total_time_range and len(total_time_range) == 2:
+            lower, upper = total_time_range
+            df = df[
+                (df['total_time_min'] >= lower) & 
+                (df['total_time_min'] <= upper)
+            ]
+        
+        return df.reset_index(drop=True)
+
+    except ImportError:
+        st.error("Error: Reading Parquet files requires 'pyarrow'. Please ensure it's installed or use a CSV file.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error reading data from live CDN: {e}. Check the race path.")
+        return pd.DataFrame()
+
 
 # --- Streamlit UI ---
-st.title("🏋️ Hyrox Data Explorer (Stable Mock Demo)")
-st.caption("This version is guaranteed to run, demonstrating the functional logic.")
+st.title("🏋️ Hyrox Data Explorer (Live CDN)")
+st.caption("Data is fetched live from the official Pyrox CDN source via Parquet files.")
+
+# Load available races once
+manifest_df = fetch_race_manifest()
+if manifest_df.empty:
+    st.error("Cannot proceed. Could not load the live race manifest.")
+    st.stop()
+    
+race_options = manifest_df['race_id'].tolist()
+
 
 # --- Sidebar for Filtering ---
 st.sidebar.header("Data Selection & Filters")
 
-# MOCK RACES (Simulating dynamic selection)
-MOCK_RACES = ["S7 - London", "S7 - Maastricht", "S6 - Madrid", "S6 - New York"]
-selected_key = st.sidebar.selectbox("Select Race:", MOCK_RACES)
+# 1. Race Selection
+selected_race_id = st.sidebar.selectbox("Select Race:", race_options)
+selected_race_path = manifest_df[manifest_df['race_id'] == selected_race_id]['path'].iloc[0]
+
 
 # 2. Gender and Division Filters
-GENDERS = ['All', 'Female', 'Male']
-DIVISIONS = ['All', 'Pro', 'Open', 'Doubles'] 
+GENDERS = ['All', 'Female', 'Male', 'Mixed']
+DIVISIONS = ['All', 'Pro', 'Open', 'Doubles', 'relay', 'staff'] # Added more divisions from common Hyrox results
 
 selected_gender = st.sidebar.selectbox("Gender Filter:", GENDERS)
 selected_division = st.sidebar.selectbox("Division Filter:", DIVISIONS)
@@ -122,62 +176,66 @@ if time_min is not None and time_max is not None:
         st.sidebar.warning("Minimum time must be less than maximum time.")
     else:
         time_range = (time_min, time_max)
-elif time_min is not None or time_max is not None:
-    st.sidebar.info("Enter both min and max for filtering.")
+
 
 # --- Main Content ---
-st.header(f"Results: {selected_key}")
-st.markdown(f"**Filters:** Gender: `{selected_gender}`, Division: `{selected_division}`, Time: `{time_range or 'None'}`")
+st.header(f"Results: {selected_race_id}")
+st.markdown(f"**Filters:** Gender: `{selected_gender}`, Division: `{selected_division}`, Time Range: `{time_range or 'None'}`")
 st.divider()
 
 
-# Fetch and Display Results (Stable execution block)
 if st.button("Fetch / Refresh Race Data"):
-    with st.spinner(f"Loading results for {selected_key}..."):
-        try:
-            results_df = fetch_mock_results(total_time_range=time_range)
-        except Exception as e:
-            st.error(f"A critical data processing error occurred: {e}")
+    with st.spinner(f"Loading results for {selected_race_id}..."):
+        
+        # Calls the function that fetches live data from the CDN
+        results_df = fetch_race_data(
+            race_path=selected_race_path, 
+            gender_filter=selected_gender,
+            division_filter=selected_division,
+            total_time_range=time_range
+        )
+
+        if results_df.empty:
+            st.error("Could not load or process data. Check the filters and manifest.")
             st.stop()
         
-        if results_df.empty:
-            st.warning("No results found for the selected time range.")
-        else:
-            st.success(f"Successfully loaded **{len(results_df)}** entries (Mock Data).")
+        st.success(f"Successfully loaded **{len(results_df)}** entries.")
             
-            # Define columns for display
-            DISPLAY_TIME_COLS = ['total_time', 'run_time', 'roxzone_time', 
-                                 'ski_erg_time', 'sled_push_time', 'sled_pull_time', 'burpee_broad_jump_time']
-            DISPLAY_COLS = ['rank', 'name'] + DISPLAY_TIME_COLS
+        # Define columns for display
+        DISPLAY_TIME_MIN_COLS = [col for col in results_df.columns if col.endswith('_min')]
+        DISPLAY_COLS = ['rank', 'name'] + DISPLAY_TIME_MIN_COLS
             
-            # --- Format the MAIN results table for display ---
-            display_df = results_df.copy()
+        # --- Format the MAIN results table for display ---
+        display_df = results_df.copy()
             
-            for col in DISPLAY_TIME_COLS:
-                # Convert the decimal minutes (e.g., total_time_min) to readable MM:SS.ss string
-                min_col = col.replace('_time', '_min')
-                if min_col in display_df.columns:
-                    # Uses the fixed minutes_to_mmss_string helper
-                    display_df[col] = minutes_to_mmss_string(display_df[min_col]) 
-                
-            st.subheader("Filtered Race Results (Time in MM:SS.ss)")
-            st.dataframe(display_df[display_df.columns.intersection(DISPLAY_COLS)])
+        for col_min in DISPLAY_TIME_MIN_COLS:
+            # Create a user-friendly column name (e.g., 'total_time_min' -> 'Total Time (MM:SS.ss)')
+            base_name = col_min.replace('_min', '').replace('_', ' ').title()
+            display_col_name = f"{base_name} (MM:SS.ss)"
+            display_df[display_col_name] = minutes_to_mmss_string(display_df[col_min]) 
             
-            # --- Calculate and format the STATISTICS table ---
-            st.subheader("Station Time Statistics (MM:SS.ss)")
+            # Drop the raw _min column after formatting
+            display_df = display_df.drop(columns=[col_min])
             
-            # Select relevant time columns for statistics (using the _min columns)
-            STAT_MIN_COLS = [col.replace('_time', '_min') for col in DISPLAY_TIME_COLS]
+        st.subheader("Filtered Race Results")
+        # Ensure we only display columns that exist after processing
+        final_display_cols = [c for c in ['rank', 'name'] + [col for col in display_df.columns if '(MM:SS.ss)' in col] if c in display_df.columns]
+        st.dataframe(display_df[final_display_cols])
             
-            time_stats = results_df[
-                results_df.columns.intersection(STAT_MIN_COLS)
-            ].describe(percentiles=[.50, .75]).loc[['mean', '50%', '75%']].transpose()
+        # --- Calculate and format the STATISTICS table ---
+        st.subheader("Station Time Statistics (MM:SS.ss)")
             
-            STAT_COLUMNS_TO_FORMAT = ['mean', '50%', '75%']
+        # Select relevant time columns for statistics (using the _min columns)
+        STAT_MIN_COLS = [col for col in results_df.columns if col.endswith('_min') and col not in ['work_time_min']]
             
-            # Format the statistics columns from minutes (decimal) to MM:SS.ss string
-            for stat in STAT_COLUMNS_TO_FORMAT:
-                # Uses the fixed minutes_to_mmss_string helper
-                time_stats[stat] = minutes_to_mmss_string(time_stats[stat])
+        time_stats = results_df[
+            results_df.columns.intersection(STAT_MIN_COLS)
+        ].describe(percentiles=[.50, .75]).loc[['mean', '50%', '75%']].transpose()
             
-            st.dataframe(time_stats)
+        STAT_COLUMNS_TO_FORMAT = ['mean', '50%', '75%']
+            
+        # Format the statistics columns from minutes (decimal) to MM:SS.ss string
+        for stat in STAT_COLUMNS_TO_FORMAT:
+            time_stats[stat] = minutes_to_mmss_string(time_stats[stat])
+            
+        st.dataframe(time_stats)
