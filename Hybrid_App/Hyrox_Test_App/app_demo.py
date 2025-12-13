@@ -14,9 +14,11 @@ def time_to_minutes(time_str):
     if pd.isna(time_str):
         return None
     try:
-        # If the value is already a number (minutes/seconds/timedelta object), return it converted to minutes.
+        # If the value is already a number (float/int), assume it's already in minutes or seconds.
         if isinstance(time_str, (int, float)):
-             return time_str / 60.0 if time_str > 1000 and time_str > 10000 else time_str # Crude guess if seconds vs minutes
+             # Assuming if a large number, it might be seconds. If small, it's minutes.
+             # We rely on the caller to ensure time_str is reasonable.
+             return time_str 
 
         # If it's a string (H:MM:SS or MM:SS)
         if isinstance(time_str, str):
@@ -44,13 +46,11 @@ def minutes_to_mmss_string(minutes):
         return ""
 
     total_seconds = minutes * 60
+    # Use floor to get minutes, and mod 60 for seconds
     m = int(total_seconds // 60)
     s = total_seconds % 60
     
-    if s >= 60:
-         m += 1
-         s -= 60
-    
+    # Simple formatting
     return f"{m:02d}:{s:05.2f}"
 
 # --- Data Fetching Functions (Using CDN Strategy) ---
@@ -77,13 +77,13 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
     data_url = f"{CDN_BASE}/{s3_key}"
 
     try:
+        # Requires pyarrow for reading parquet directly from URL
         df = pd.read_parquet(data_url)
         
         # 2. Standardize column names (lowercase, replace spaces/hyphens with underscores)
         df.columns = df.columns.str.lower().str.replace(' ', '_').str.replace('-', '_')
         
-        # 3. Define the critical renaming map for station columns
-        # These are the columns the user expects to see.
+        # 3. Define the critical renaming map for all known columns
         rename_map = {
             'run_time_split': 'run_time',
             'roxzone': 'roxzone_time',
@@ -95,13 +95,32 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
             'farmers_carry': 'farmers_carry_time',
             'sandbag_lunge': 'sandbag_lunge_time',
             'wall_balls': 'wall_balls_time',
-            'time': 'total_time' # Total race time might be named just 'time'
+            'time': 'total_time' 
         }
         df = df.rename(columns=rename_map, errors='ignore')
 
-        # 4. Conversion Logic (CRITICAL FIX applied here)
+        # 3b. Defensive Check for 'total_time' (The Fix)
+        if 'total_time' not in df.columns:
+            candidate_total_time_cols = [
+                'finish_time', 'race_time', 'result_time', 'final_time', 
+                'totaltime', 'finishtime', 'racetime'
+            ]
+            
+            found_total_time = False
+            for cand_col in candidate_total_time_cols:
+                if cand_col in df.columns:
+                    df = df.rename(columns={cand_col: 'total_time'})
+                    found_total_time = True
+                    break
+            
+            if not found_total_time and 'total_time' not in df.columns:
+                st.error(f"Debug Info: Columns found in data: {list(df.columns)}")
+                raise KeyError("The race data is missing the required 'total_time' column after all known renaming attempts.")
         
-        # List of all time columns we need to process (now using the target names from the map)
+        # 4. Conversion Logic
+        
+        # List of all time columns we need to process (including the confirmed 'total_time')
+        # We ensure 'work_time' is included if it exists in the data.
         time_cols_to_process = list(set(rename_map.values())) + ['work_time']
         
         for col in time_cols_to_process:
@@ -112,16 +131,16 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
                 # Apply conversion
                 df[target_col] = df[col].apply(time_to_minutes)
                 
-                # If the original column was a string (object dtype), drop it to avoid confusion.
+                # If the original column was a string (object dtype), drop it to clean up the frame.
                 if df[col].dtype == object and target_col != col:
                     df = df.drop(columns=[col])
         
-        # Final check for the essential column
+        # Final check for the essential column after conversion
         if 'total_time_min' not in df.columns:
-            # This handles cases where 'time' was not present or the conversion failed dramatically
-            raise KeyError("The race data is missing the required 'total_time' column or conversion failed.")
+            raise KeyError("Conversion to 'total_time_min' failed. Data may be malformed.")
 
-        # 5. Apply filters (now safe, as 'total_time_min' is guaranteed to exist)
+
+        # 5. Apply filters
         df = df.dropna(subset=['total_time_min'])
 
         if gender_filter and gender_filter.lower() != 'all' and 'gender' in df.columns:
@@ -143,7 +162,6 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
         st.error("Error: Reading Parquet files requires 'pyarrow'. Please ensure it's installed.")
         st.stop()
     except Exception as e:
-        # Use st.exception for better error display in Streamlit
         st.exception(e)
         st.error(f"Error reading data from live CDN. Check the filters, manifest, or that 'pyarrow' is in your requirements.txt.")
         return pd.DataFrame()
@@ -240,15 +258,16 @@ if st.button("Fetch / Refresh Race Data"):
             
         if not STAT_MIN_COLS:
             st.warning("No time columns found to calculate statistics.")
-            st.stop()
+            # st.stop() # Do not stop, let the rest of the app run
             
-        time_stats = results_df[
-            results_df.columns.intersection(STAT_MIN_COLS)
-        ].describe(percentiles=[.50, .75]).loc[['mean', '50%', '75%']].transpose()
-            
-        STAT_COLUMNS_TO_FORMAT = ['mean', '50%', '75%']
-            
-        for stat in STAT_COLUMNS_TO_FORMAT:
-            time_stats[stat] = minutes_to_mmss_string(time_stats[stat])
-            
-        st.dataframe(time_stats)
+        else:
+            time_stats = results_df[
+                results_df.columns.intersection(STAT_MIN_COLS)
+            ].describe(percentiles=[.50, .75]).loc[['mean', '50%', '75%']].transpose()
+                
+            STAT_COLUMNS_TO_FORMAT = ['mean', '50%', '75%']
+                
+            for stat in STAT_COLUMNS_TO_FORMAT:
+                time_stats[stat] = minutes_to_mmss_string(time_stats[stat])
+                
+            st.dataframe(time_stats)
