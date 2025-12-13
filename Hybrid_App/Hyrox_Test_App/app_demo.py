@@ -4,11 +4,15 @@ import requests
 import io
 import traceback 
 
+# --- Streamlit Page Configuration ---
+# Set the page layout to wide mode for a better data viewing experience
+st.set_page_config(layout="wide")
+
 # --- Configuration ---
 CDN_BASE = "https://d2wl4b7sx66tfb.cloudfront.net"
 MANIFEST_URL = f"{CDN_BASE}/manifest/latest.csv"
 
-# --- Station Name Mapping (New addition for better display) ---
+# --- Station Name Mapping ---
 STATION_NAMES_MAP = {
     'work_1': 'Work 1 - 1000m SkiErg',
     'work_2': 'Work 2 - 50m Sled Push',
@@ -22,7 +26,6 @@ STATION_NAMES_MAP = {
     'total_time': 'Total Time',
     'run_time': 'Total Run Time',
     'work_time': 'Total Work Time',
-    # Map for the individual run splits if you want them in the table
     'run_1': 'Run 1 Split',
     'run_2': 'Run 2 Split',
     'run_3': 'Run 3 Split',
@@ -41,22 +44,17 @@ def time_to_minutes(time_str):
     if pd.isna(time_str):
         return None
     try:
-        # CRITICAL FIX: Handle Pandas Timedelta objects, which Parquet often uses for time data.
         if isinstance(time_str, pd.Timedelta):
             return time_str.total_seconds() / 60.0
             
-        # If the value is already a number (float/int), assume it's already in minutes.
         if isinstance(time_str, (int, float)):
              return time_str 
 
-        # If it's a string (H:MM:SS or MM:SS)
         if isinstance(time_str, str):
             parts = time_str.split(':')
             if len(parts) == 2:
-                # MM:SS format
                 return int(parts[0]) + float(parts[1]) / 60
             elif len(parts) == 3:
-                # HH:MM:SS format
                 return int(parts[0]) * 60 + int(parts[1]) + float(parts[2]) / 60
             
     except Exception:
@@ -108,7 +106,7 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
         # 1. Standardize column names (lowercase, snake_case)
         df.columns = df.columns.str.lower().str.replace(' ', '_').str.replace('-', '_')
         
-        # 2. Define the exact time columns to convert based on the confirmed schema
+        # 2. Define the exact time columns to convert
         time_cols_to_process = [
             'total_time', 'roxzone_time', 'run_time', 'work_time', 
         ] + [f'run_{i}' for i in range(1, 9)] + [f'work_{i}' for i in range(1, 9)]
@@ -120,10 +118,8 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
             if col in df.columns:
                 target_col = f'{col}_min'
                 
-                # Apply conversion
                 converted_series = df[col].apply(time_to_minutes)
                 
-                # CRITICAL CHECK for total_time
                 if col == 'total_time':
                     # Check if all values are NaN after conversion
                     if converted_series.isna().all() and len(converted_series) > 0:
@@ -132,7 +128,7 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
                     
                 df[target_col] = converted_series
                 
-                # Drop the original column if its type was not numeric to prevent mix-ups
+                # Drop the original column if its type was not numeric
                 if df[col].dtype == object and target_col != col:
                     df = df.drop(columns=[col])
 
@@ -168,9 +164,9 @@ def fetch_race_data(race_path, gender_filter=None, division_filter=None, total_t
 
 
 # --- Streamlit UI ---
-st.title("🏋️ Hyrox Data Explorer (Live CDN)")
-st.caption("Data is fetched live from the official Pyrox CDN source via Parquet files.")
 
+# New, trendy header
+st.title("🔥 Hyrox Race Analytics: Performance Deep Dive")
 
 # Load available races once
 manifest_df = fetch_race_manifest()
@@ -182,11 +178,14 @@ race_options = manifest_df['race_id'].tolist()
 
 
 # --- Sidebar for Filtering ---
-st.sidebar.header("Data Selection & Filters")
+st.sidebar.title("⚙️ Configure Data")
 
 # 1. Race Selection
 selected_race_id = st.sidebar.selectbox("Select Race:", race_options)
 selected_race_path = manifest_df[manifest_df['race_id'] == selected_race_id]['path'].iloc[0]
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎯 Filters")
 
 
 # 2. Gender and Division Filters
@@ -196,8 +195,10 @@ DIVISIONS = ['All', 'Pro', 'Open', 'Doubles', 'Relay', 'Staff']
 selected_gender = st.sidebar.selectbox("Gender Filter:", GENDERS)
 selected_division = st.sidebar.selectbox("Division Filter:", DIVISIONS)
 
+st.sidebar.markdown("---")
+
 # 3. Total Time Filter
-st.sidebar.subheader("Total Time Range (Minutes)")
+st.sidebar.subheader("⏱ Total Time Range (Minutes)")
 time_min = st.sidebar.number_input("Minimum Time (Minutes):", value=50.0, min_value=0.0)
 time_max = st.sidebar.number_input("Maximum Time (Minutes):", value=100.0, min_value=0.0)
 
@@ -210,15 +211,14 @@ if time_min is not None and time_max is not None:
 
 
 # --- Main Content ---
-st.header(f"Results: {selected_race_id}")
-st.markdown(f"**Filters:** Gender: `{selected_gender}`, Division: `{selected_division}`, Time Range: `{time_range or 'None'}`")
+st.header(f"Race: {selected_race_id}")
+st.caption(f"Showing results filtered by: Gender: **{selected_gender}**, Division: **{selected_division}**.")
 st.divider()
 
 
-if st.button("Fetch / Refresh Race Data"):
+if st.button("🚀 Fetch / Refresh Race Data", type="primary"):
     with st.spinner(f"Loading results for {selected_race_id}..."):
         
-        # Calls the function that fetches live data from the CDN
         results_df = fetch_race_data(
             race_path=selected_race_path, 
             gender_filter=selected_gender,
@@ -231,6 +231,31 @@ if st.button("Fetch / Refresh Race Data"):
             st.stop()
         
         st.success(f"Successfully loaded **{len(results_df)}** entries.")
+
+        # --- Summary Metrics (New Design Feature) ---
+        col1, col2, col3 = st.columns(3)
+        
+        fastest_time = results_df['total_time_min'].min()
+        average_time = results_df['total_time_min'].mean()
+        
+        with col1:
+            st.metric(
+                label="Total Athletes Analyzed", 
+                value=len(results_df),
+                delta="Based on current filters"
+            )
+        with col2:
+            st.metric(
+                label="🏆 Fastest Time", 
+                value=minutes_to_mmss_string(fastest_time)
+            )
+        with col3:
+            st.metric(
+                label="⏱ Average Time", 
+                value=minutes_to_mmss_string(average_time)
+            )
+
+        st.markdown("---")
             
         # Define columns for display (all the new *_min columns)
         DISPLAY_TIME_MIN_COLS = [col for col in results_df.columns if col.endswith('_min')]
@@ -239,10 +264,9 @@ if st.button("Fetch / Refresh Race Data"):
         display_df = results_df.copy()
             
         for col_min in DISPLAY_TIME_MIN_COLS:
-            # Get the original column name (e.g., 'work_1')
             original_col = col_min.replace('_min', '')
             
-            # Look up the custom name, fall back to a cleaned version if not found
+            # Apply Custom Naming
             if original_col in STATION_NAMES_MAP:
                 base_name = STATION_NAMES_MAP[original_col]
             else:
@@ -251,20 +275,18 @@ if st.button("Fetch / Refresh Race Data"):
             display_col_name = f"{base_name} (MM:SS.ss)"
             display_df[display_col_name] = minutes_to_mmss_string(display_df[col_min]) 
             
-            # Drop the raw _min column after formatting
             display_df = display_df.drop(columns=[col_min])
             
-        st.subheader("Filtered Race Results")
-        # Ensure correct column order: rank, name, then all time columns
+        st.subheader("📊 Filtered Race Results")
+        
         final_display_cols = [c for c in ['rank', 'name'] + [col for col in display_df.columns if '(MM:SS.ss)' in col] if c in display_df.columns]
-        st.dataframe(display_df[final_display_cols])
+        st.dataframe(display_df[final_display_cols], use_container_width=True)
             
         # --- Calculate and format the STATISTICS table ---
-        st.subheader("Station Time Statistics (MM:SS.ss)")
+        st.subheader("📈 Station Time Statistics (MM:SS.ss)")
             
         STAT_MIN_COLS = [col for col in results_df.columns if col.endswith('_min')]
         
-        # Exclude only work_time_min, as total_time_min is useful here
         STAT_MIN_COLS = [col for col in STAT_MIN_COLS if col not in ['work_time_min']]
             
         if not STAT_MIN_COLS:
@@ -274,7 +296,6 @@ if st.button("Fetch / Refresh Race Data"):
                 results_df.columns.intersection(STAT_MIN_COLS)
             ].describe(percentiles=[.50, .75]).loc[['mean', '50%', '75%']].transpose()
             
-            # Rename the index of the statistics table using the map
             stats_index_map = {f'{k}_min': v for k, v in STATION_NAMES_MAP.items() if f'{k}_min' in time_stats.index}
             time_stats = time_stats.rename(index=stats_index_map)
                 
@@ -283,4 +304,4 @@ if st.button("Fetch / Refresh Race Data"):
             for stat in STAT_COLUMNS_TO_FORMAT:
                 time_stats[stat] = minutes_to_mmss_string(time_stats[stat])
                 
-            st.dataframe(time_stats)
+            st.dataframe(time_stats, use_container_width=True)
