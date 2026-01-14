@@ -1,5 +1,8 @@
+# feedback_logic.py
+
 import sys
 import os
+# Essential for your project structure to handle local imports like src.models
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import joblib
@@ -17,7 +20,7 @@ from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel, PeftConfig
 
 
-# global definitions
+# global definitions for LLM/RAG system
 MODEL_PATH = "Syllerim/hyrox_mistral_lora_model"
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_PATH = os.path.join(ROOT_DIR, "data", "processed", "hyrox_full_data_instructed_feedback.csv")
@@ -31,12 +34,26 @@ df = None
 stations_scaler = None
 age_scaler = None
 
-model = None
+model = None # This is the LLM (Mistral/PEFT)
 tokenizer = None
 generator = None
 
+# --- Feature list for the MLflow Regression Model (Time Prediction) ---
+# This feature list MUST be in the exact order the regression model was trained
+RUN_COLUMNS = [f'run_{i}' for i in range(1, 9)] 
+WORK_COLUMNS = [f'work_{i}' for i in range(1, 9)] 
+ROXZONE_COLUMNS = [f'roxzone_{i}' for i in range(1, 8)] 
+
+REGRESSION_FEATURE_COLUMNS = (
+    ['age'] + 
+    RUN_COLUMNS + 
+    WORK_COLUMNS + 
+    ROXZONE_COLUMNS + 
+    ['gender_Male'] # Assuming 'Female' is the dropped baseline after OHE
+)
 # ----------------------------------------------------------------------------
 def load_model():
+    # This function loads the LLM/RAG components
     global df, stations_scaler, age_scaler, model, tokenizer, generator
     if model is None or tokenizer is None or generator is None or df is None or stations_scaler is None or age_scaler is None:
         df = pd.read_csv(CSV_PATH)
@@ -64,12 +81,40 @@ def load_model():
     return generator
 
 # ----------------------------------------------------------------------------
-def generate_feedback(data: HyroxModelRequest):
+# MODIFIED: Accepts the MLflow model (model_regressor) as an argument
+def generate_feedback(data: HyroxModelRequest, model_regressor): 
     
+    # Load RAG/LLM components on first call
     load_model()
 
-    # process input data through the full pipeline
-    processed_df = pipeline.process_hyrox_request(data)
+    # --- NEW: Regression Model Prediction (Quantitative Analysis) ---
+    
+    # 1. Convert Pydantic model to a single-row DataFrame
+    input_dict = data.model_dump(exclude_none=True) 
+    input_df = pd.DataFrame([input_dict])
+
+    # 2. Handle Categorical Features (One-Hot Encoding for 'gender')
+    # This is required for the ML model input
+    input_df = pd.get_dummies(input_df, columns=['gender'], drop_first=True)
+    
+    # 3. Column Alignment (Crucial Step: Must match training data)
+    for col in REGRESSION_FEATURE_COLUMNS:
+        if col not in input_df.columns:
+            # Fill missing OHE columns (e.g., if gender was 'Female') with 0.0
+            input_df[col] = 0.0
+
+    # Select and reorder columns to match the trained regression model's feature space
+    input_features = input_df[REGRESSION_FEATURE_COLUMNS]
+
+    # 4. Prediction
+    predicted_time = model_regressor.predict(input_features)[0]
+    predicted_time_mins = round(float(predicted_time), 2)
+    
+    # --- END NEW: Regression Model Prediction ---
+
+
+    # process input data through the full pipeline (used for RAG/LLM features)
+    processed_df = pipeline.process_hyrox_request(data) 
 
     # prepare query to the vector store
     query_text = "I want to find participants who had similar overall performance to me."
@@ -79,9 +124,10 @@ def generate_feedback(data: HyroxModelRequest):
     # perform vector search
     collection_name = "hyrox_participants"
     persist_dir = CHROMA_FOLDER_PATH
-    client = client = PersistentClient(path=persist_dir)
+    client = PersistentClient(path=persist_dir)
     collection = client.get_collection(name=collection_name)
-    results = collection.query(query_texts=[query_text], n_results=1, metadata={"race_minutes": race_minutes})
+    results = collection.query(query_texts=[query_text], n_results=1, where={"race_minutes": race_minutes})
+    
     if not results["documents"] or not results["documents"][0]:
         return {"error": "No similar participants found."}
 
@@ -92,52 +138,24 @@ def generate_feedback(data: HyroxModelRequest):
     perf_only_suggestions = analyze_improvement_from_similar_perf_only(processed_df, similar_participant_data)
     perf_context_suggestions = analyze_improvement_from_similar_perf_context(processed_df, similar_participant_data)
 
+    # --- Update the return dictionary to include the quantitative prediction ---
     return {
+        "predicted_total_time_minutes": predicted_time_mins, # <-- NEW
         "performance_feedback": processed_df["performance_feedback"].iloc[0],
-        "perf_only_improvements": perf_only_suggestions, # based on compare with the similar participant's performance
-        "perf_context_improvements": perf_context_suggestions # based on compare with the similar participant's performance
+        "perf_only_improvements": perf_only_suggestions,
+        "perf_context_improvements": perf_context_suggestions 
     }
 
 
 def build_prompt(data):
-    # convert gender to expected format ("male" -> 0, "female" -> 1)
+    # This function is currently commented out/placeholder
     gender_map = {"male": 0, "female": 1}
     gender_value = gender_map.get(data.gender.lower())
 
-   
-
-    # prompt = f"""You are a HYROX coach. Given the following normalized performance values for a race participant, analyze their performance and give 3 suggestions for improvement and 2 areas where they performed well.
-    #     gender: {data.gender},
-    #     age_min: {scaled_age[0]:.4f},
-    #     age_max: {scaled_age[1]:.4f},
-    #     total_time: {scaled_df['total_time'].iloc[0]:.4f},
-    #     work_time: {scaled_df['work_time'].iloc[0]:.4f},
-    #     roxzone_time: {scaled_df['roxzone_time'].iloc[0]:.4f},
-    #     run_1: {scaled_df['run_1'].iloc[0]:.4f},
-    #     run_2: {scaled_df['run_2'].iloc[0]:.4f},
-    #     run_3: {scaled_df['run_3'].iloc[0]:.4f},
-    #     run_4: {scaled_df['run_4'].iloc[0]:.4f},
-    #     run_5: {scaled_df['run_5'].iloc[0]:.4f},
-    #     run_6: {scaled_df['run_6'].iloc[0]:.4f},
-    #     run_7: {scaled_df['run_7'].iloc[0]:.4f},
-    #     run_8: {scaled_df['run_8'].iloc[0]:.4f},
-    #     1000m Ski: {scaled_df['1000m Ski'].iloc[0]:.4f},
-    #     50m Sled Push: {scaled_df['50m Sled Push'].iloc[0]:.4f},
-    #     50m Sled Pull: {scaled_df['50m Sled Pull'].iloc[0]:.4f},
-    #     80m Burpee Broad Jump: {scaled_df['80m Burpee Broad Jump'].iloc[0]:.4f},
-    #     1000m Row: {scaled_df['1000m Row'].iloc[0]:.4f},
-    #     200m Farmer Carry: {scaled_df['200m Farmer Carry'].iloc[0]:.4f},
-    #     100m Sandbag Lunges: {scaled_df['100m Sandbag Lunges'].iloc[0]:.4f},
-    #     100 Wall Balls: {scaled_df['100 Wall Balls'].iloc[0]:.4f},
-    #     roxzone_1: {scaled_df['roxzone_1'].iloc[0]:.4f},
-    #     roxzone_2: {scaled_df['roxzone_2'].iloc[0]:.4f},
-    #     roxzone_3: {scaled_df['roxzone_3'].iloc[0]:.4f},
-    #     roxzone_4: {scaled_df['roxzone_4'].iloc[0]:.4f},
-    #     roxzone_5: {scaled_df['roxzone_5'].iloc[0]:.4f},
-    #     roxzone_6: {scaled_df['roxzone_6'].iloc[0]:.4f},
-    #     roxzone_7: {scaled_df['roxzone_7'].iloc[0]:.4f},
-    #     ### Response:"""
+    # prompt = f"""You are a HYROX coach. Given the following normalized performance values for a race participant...
     # return prompt
+    pass
+
 
 def analyze_improvement_from_similar_perf_only(user_df: pd.DataFrame, similar_df: pd.DataFrame) -> dict:
     """
