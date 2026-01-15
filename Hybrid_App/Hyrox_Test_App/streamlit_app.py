@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import io
 from fpdf import FPDF
-# Corrected import name below
+# Standard import for the library
 from st_gsheets_connection import GSheetsConnection
 
 # Force Matplotlib to use a non-interactive backend
