@@ -4,4 +4,4 @@ plotly
 scipy
 matplotlib
 fpdf
-streamlit-gsheets-connection
+st-gsheets-connection

@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 import io
 from fpdf import FPDF
-from streamlit_gsheets import GSheetsConnection
+# Corrected import name below
+from st_gsheets_connection import GSheetsConnection
 
 # Force Matplotlib to use a non-interactive backend
 matplotlib.use('Agg')
@@ -216,7 +217,6 @@ if st.session_state.profile_saved:
             strength_f = 1.0 - (min(b_trap, 200) / 400)
             for i in range(1, 8): sim[f"work_{i}"] = 4.0 * strength_f + (i * 0.1)
             
-            # 4-MINUTE WALL BALL CALC (100 Reps predicted)
             wb_pace = 240.0 / max(b_wb, 1)
             sim["work_8"] = (wb_pace * 100 / 60.0) * 1.15
             
