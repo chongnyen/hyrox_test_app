@@ -13,3 +13,5 @@ gunicorn
 chromadb
 sentence-transformers
 mlflow
+st-gsheets-connection
+gspread
