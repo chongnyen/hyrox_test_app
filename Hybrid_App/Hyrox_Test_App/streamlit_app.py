@@ -9,9 +9,6 @@ import matplotlib
 import io
 from fpdf import FPDF
 
-# --- TEMPORARY BYPASS FOR GSHEETS ERROR ---
-# from st_gsheets_connection import GSheetsConnection 
-
 # Force Matplotlib to use a non-interactive backend
 matplotlib.use('Agg')
 
@@ -49,7 +46,6 @@ st.markdown(f"""
     .badge-strong {{ background: {COLOR_STRONG}; }}
     .badge-developing {{ background: {COLOR_DEVELOPING}; }}
     .badge-focus {{ background: {COLOR_FOCUS}; }}
-    .lead-box {{ background: {CARD_BG}; border: 2px solid {NEON}; padding: 30px; border-radius: 10px; text-align: center; margin: 20px 0; }}
     </style>
     """, unsafe_allow_html=True)
 
