@@ -43,9 +43,6 @@ st.markdown(f"""
     h1, h2, h3, h4 {{ font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 2px; font-weight: 900 !important; color: white !important; }}
     .stButton>button {{ width: 100%; background-color: {NEON} !important; color: black !important; font-weight: 900; text-transform: uppercase; border-radius: 0px; height: 3.5em; border: none; }}
     .performance-card {{ background: rgba(26, 28, 35, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); padding: 16px; margin-bottom: 12px; border-radius: 8px; }}
-    .strategy-table {{ width: 100%; border-collapse: collapse; color: white; background: {CARD_BG}; border-radius: 8px; overflow: hidden; }}
-    .strategy-table th {{ background: {GRID_COLOR}; padding: 12px; text-align: left; font-weight: 900; color: {NEON}; }}
-    .strategy-table td {{ padding: 12px; border-bottom: 1px solid {GRID_COLOR}; }}
     .status-badge {{ font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; font-weight: bold; text-transform: uppercase; color: white; }}
     .badge-peak {{ background: {COLOR_PEAK}; }}
     .badge-strong {{ background: {COLOR_STRONG}; }}
