@@ -15,3 +15,7 @@ sentence-transformers
 mlflow
 st-gsheets-connection
 gspread
+plotly
+scipy
+matplotlib
+fpdf
