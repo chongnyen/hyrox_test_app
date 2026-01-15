@@ -1,7 +1,0 @@
-pandas
-numpy
-plotly
-scipy
-matplotlib
-fpdf
-st-gsheets-connection
