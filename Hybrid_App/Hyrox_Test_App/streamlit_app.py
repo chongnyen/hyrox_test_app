@@ -8,15 +8,15 @@ import matplotlib.pyplot as plt
 import matplotlib
 import io
 from fpdf import FPDF
-# Standard import for the library
-from st_gsheets_connection import GSheetsConnection
+
+# --- TEMPORARY BYPASS FOR GSHEETS ERROR ---
+# from st_gsheets_connection import GSheetsConnection 
 
 # Force Matplotlib to use a non-interactive backend
 matplotlib.use('Agg')
 
 # --- SETTINGS ---
 st.set_page_config(page_title="GRITYARD x HYROX AI", layout="wide")
-WORKSHEET_NAME = "Sheet1"
 
 # --- DATASET ---
 HYROX_STATS = {
@@ -68,11 +68,6 @@ def d_to_t(dec):
     m = int(dec); s = int(round((dec - m) * 60))
     if s >= 60: m += 1; s = 0
     return f"{m:02d}:{s:02d}"
-
-def calculate_age_group(dob):
-    today = date.today()
-    age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-    return f"{age}"
 
 def get_performance_tier_info(gap_sec):
     if gap_sec <= -20: return "PEAK", "badge-peak", COLOR_PEAK
@@ -133,17 +128,6 @@ def render_heatmap(df_subset, title):
         </div>
         """, unsafe_allow_html=True)
 
-def render_lead_form(unique_key):
-    st.markdown(f'<div class="lead-box"><h2>🔓 UNLOCK FULL AUDIT</h2><p>Submit to see <b>Deep Comparison</b> and <b>PDF Strategy</b>.</p></div>', unsafe_allow_html=True)
-    with st.form(f"magnet_{unique_key}"):
-        name = st.text_input("Name")
-        whatsapp = st.text_input("WhatsApp")
-        if st.form_submit_button("GET REPORT"):
-            if name and whatsapp:
-                st.session_state.lead_submitted = True
-                st.session_state.lead_name = name
-                st.rerun()
-
 def render_ui_block(mode):
     res, inputs = st.session_state[f'{mode}_results'], st.session_state[f'{mode}_inputs']
     if res and inputs:
@@ -163,16 +147,11 @@ def render_ui_block(mode):
         with c1: render_heatmap(gaps_df[gaps_df['Station'].str.contains("Run")], "RUN ENGINE")
         with c2: render_heatmap(gaps_df[~gaps_df['Station'].str.contains("Run")], "STATION POWER")
 
-        if not st.session_state.get('lead_submitted', False):
-            render_lead_form(mode)
-        else:
-            st.success(f"Verified Athlete: {st.session_state.lead_name}")
-            for _, row in gaps_df.iterrows(): 
-                draw_distribution(row['Station'], row['Actual'], row['Target'], res['stds'].get(row['Station'], 0.5), f"d_{mode}_{row['Station']}")
+        for _, row in gaps_df.iterrows(): 
+            draw_distribution(row['Station'], row['Actual'], row['Target'], res['stds'].get(row['Station'], 0.5), f"d_{mode}_{row['Station']}")
 
 # --- APP ---
 if "profile_saved" not in st.session_state: st.session_state.profile_saved = False
-if "lead_submitted" not in st.session_state: st.session_state.lead_submitted = False
 
 st.sidebar.markdown("## 👤 ATHLETE PROFILE")
 if not st.session_state.profile_saved:
@@ -216,10 +195,8 @@ if st.session_state.profile_saved:
             sim = {f"run_{i+1}": fresh_1km * (1.15 + (i * 0.02)) for i in range(8)}
             strength_f = 1.0 - (min(b_trap, 200) / 400)
             for i in range(1, 8): sim[f"work_{i}"] = 4.0 * strength_f + (i * 0.1)
-            
             wb_pace = 240.0 / max(b_wb, 1)
             sim["work_8"] = (wb_pace * 100 / 60.0) * 1.15
-            
             st.session_state.prediction_results = get_local_analysis(sim, st.session_state.u_gender, target_window)
             st.session_state.prediction_inputs = sim
             mean_finish = sum(sim.values()) + t_to_d(rox_in)
