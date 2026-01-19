@@ -359,7 +359,7 @@ if st.session_state.profile_saved:
             <div class="lead-box">
                 <h3>VIRTUAL CONSULTATION</h3>
                 <p>Ready to level up your training?</p>
-                <a href="https://wa.me/YOUR_PHONE"><button style="background-color:{NEON}; border:none; padding:10px; width:100%; cursor:pointer; font-weight:900;">DIRECT WHATSAPP CHAT</button></a>
+                <a href="https://wa.me/87105650"><button style="background-color:{NEON}; border:none; padding:10px; width:100%; cursor:pointer; font-weight:900;">DIRECT WHATSAPP CHAT</button></a>
             </div>
             """, unsafe_allow_html=True)
 else:
