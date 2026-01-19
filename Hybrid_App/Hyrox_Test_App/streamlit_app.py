@@ -19,7 +19,9 @@ st.set_page_config(page_title="GRITYARD x HYROX AI", layout="wide")
 HYROX_STATS = {
     "Sub 65min": {"male": {"run_1": (3.72, 0.81), "work_1": (4.12, 0.45), "run_2": (4.01, 0.4), "work_2": (2.1, 0.7), "run_3": (4.25, 0.45), "work_3": (3.5, 0.9), "run_4": (4.2, 0.45), "work_4": (2.8, 0.6), "run_5": (4.3, 0.45), "work_5": (3.8, 0.4), "run_6": (4.2, 0.45), "work_6": (1.6, 0.3), "run_7": (4.2, 0.45), "work_7": (3.2, 0.6), "run_8": (4.5, 0.5), "work_8": (3.9, 0.8)}, "female": {"run_1": (4.1, 0.8), "work_1": (4.3, 0.5), "run_2": (4.4, 0.5), "work_2": (2.4, 0.8), "run_3": (4.7, 0.5), "work_3": (3.9, 1.0), "run_4": (4.6, 0.5), "work_4": (3.2, 0.7), "run_5": (4.7, 0.5), "work_5": (4.1, 0.5), "run_6": (4.6, 0.5), "work_6": (1.8, 0.4), "run_7": (4.6, 0.5), "work_7": (3.6, 0.7), "run_8": (4.9, 0.6), "work_8": (4.2, 0.9)}},
     "65-75min": {"male": {"run_1": (4.08, 0.69), "work_1": (4.45, 0.5), "run_2": (4.42, 0.5), "work_2": (2.7, 0.9), "run_3": (4.75, 0.6), "work_3": (4.2, 1.1), "run_4": (4.72, 0.6), "work_4": (3.6, 0.8), "run_5": (4.82, 0.6), "work_5": (4.1, 0.5), "run_6": (4.75, 0.6), "work_6": (1.9, 0.4), "run_7": (4.7, 0.6), "work_7": (3.8, 0.7), "run_8": (5.1, 0.7), "work_8": (4.5, 1.0)}, "female": {"run_1": (4.5, 0.7), "work_1": (4.7, 0.6), "run_2": (4.9, 0.6), "work_2": (3.1, 1.0), "run_3": (5.2, 0.7), "work_3": (4.8, 1.2), "run_4": (5.1, 0.7), "work_4": (4.2, 0.9), "run_5": (5.2, 0.7), "work_5": (4.4, 0.6), "run_6": (5.1, 0.7), "work_6": (2.1, 0.5), "run_7": (5.1, 0.7), "work_7": (4.4, 0.8), "run_8": (5.6, 0.8), "work_8": (5.1, 1.1)}},
-    "75-85min": {"male": {"run_1": (4.4, 0.8), "work_1": (4.8, 0.6), "run_2": (4.85, 0.6), "work_2": (3.2, 1.1), "run_3": (5.3, 0.7), "work_3": (4.8, 1.3), "run_4": (5.25, 0.7), "work_4": (4.2, 1.0), "run_5": (5.4, 0.7), "work_5": (4.4, 0.6), "run_6": (5.25, 0.7), "work_6": (2.1, 0.5), "run_7": (5.2, 0.7), "work_7": (4.4, 0.9), "run_8": (5.7, 0.8), "work_8": (5.1, 1.3)}, "female": {"run_1": (4.8, 0.8), "work_1": (5.1, 0.7), "run_2": (5.4, 0.7), "work_2": (3.8, 1.2), "run_3": (5.9, 0.8), "work_3": (5.6, 1.5), "run_4": (5.8, 0.8), "work_4": (5.0, 1.2), "run_5": (5.9, 0.8), "work_5": (4.7, 0.7), "run_6": (5.8, 0.8), "work_6": (2.4, 0.6), "run_7": (5.7, 0.8), "work_7": (5.2, 1.0), "run_8": (6.3, 1.0), "work_8": (5.8, 1.5)}}
+    "75-85min": {"male": {"run_1": (4.4, 0.8), "work_1": (4.8, 0.6), "run_2": (4.85, 0.6), "work_2": (3.2, 1.1), "run_3": (5.3, 0.7), "work_3": (4.8, 1.3), "run_4": (5.25, 0.7), "work_4": (4.2, 1.0), "run_5": (5.4, 0.7), "work_5": (4.4, 0.6), "run_6": (5.25, 0.7), "work_6": (2.1, 0.5), "run_7": (5.2, 0.7), "work_7": (4.4, 0.9), "run_8": (5.7, 0.8), "work_8": (5.1, 1.3)}, "female": {"run_1": (4.8, 0.8), "work_1": (5.1, 0.7), "run_2": (5.4, 0.7), "work_2": (3.8, 1.2), "run_3": (5.9, 0.8), "work_3": (5.6, 1.5), "run_4": (5.8, 0.8), "work_4": (5.0, 1.2), "run_5": (5.9, 0.8), "work_5": (4.7, 0.7), "run_6": (5.8, 0.8), "work_6": (2.4, 0.6), "run_7": (5.7, 0.8), "work_7": (5.2, 1.0), "run_8": (6.3, 1.0), "work_8": (5.8, 1.5)}},
+    "85-95min": {"male": {"run_1": (4.68, 0.85), "work_1": (5.2, 0.7), "run_2": (5.3, 0.7), "work_2": (3.7, 1.3), "run_3": (5.8, 0.8), "work_3": (5.5, 1.6), "run_4": (5.75, 0.8), "work_4": (5.0, 1.3), "run_5": (5.9, 0.8), "work_5": (4.7, 0.7), "run_6": (5.75, 0.8), "work_6": (2.4, 0.6), "run_7": (5.7, 0.8), "work_7": (5.1, 1.1), "run_8": (6.3, 0.9), "work_8": (5.8, 1.6)}, "female": {"run_1": (5.1, 0.9), "work_1": (5.5, 0.8), "run_2": (5.8, 0.8), "work_2": (4.4, 1.5), "run_3": (6.4, 1.0), "work_3": (6.4, 1.8), "run_4": (6.3, 1.0), "work_4": (5.8, 1.5), "run_5": (6.5, 1.0), "work_5": (5.1, 0.8), "run_6": (6.3, 1.0), "work_6": (2.7, 0.7), "run_7": (6.3, 1.0), "work_7": (6.0, 1.3), "run_8": (7.1, 1.2), "work_8": (6.6, 1.9)}},
+    "95-110min": {"male": {"run_1": (5.0, 0.98), "work_1": (5.6, 0.9), "run_2": (5.8, 0.9), "work_2": (4.5, 1.6), "run_3": (6.4, 1.1), "work_3": (6.5, 2.0), "run_4": (6.3, 1.1), "work_4": (6.2, 1.7), "run_5": (6.6, 1.1), "work_5": (5.2, 0.9), "run_6": (6.4, 1.1), "work_6": (2.8, 0.8), "run_7": (6.3, 1.1), "work_7": (6.2, 1.5), "run_8": (7.1, 1.3), "work_8": (6.9, 2.2)}, "female": {"run_1": (5.5, 1.1), "work_1": (6.0, 1.0), "run_2": (6.5, 1.1), "work_2": (5.2, 1.9), "run_3": (7.2, 1.3), "work_3": (7.8, 2.3), "run_4": (7.1, 1.3), "work_4": (7.2, 2.0), "run_5": (7.4, 1.4), "work_5": (5.6, 1.0), "run_6": (7.1, 1.4), "work_6": (3.2, 0.9), "run_7": (7.1, 1.4), "work_7": (7.5, 1.8), "run_8": (8.3, 1.6), "work_8": (8.2, 2.6)}}
 }
 
 NEON, CYAN, RED, DARK_BG, CARD_BG, GRID_COLOR = "#DFFF00", "#00F0FF", "#FF4B4B", "#0E1117", "#1A1C23", "#2D2D2D"
@@ -46,6 +48,10 @@ st.markdown(f"""
     .badge-strong {{ background: {COLOR_STRONG}; }}
     .badge-developing {{ background: {COLOR_DEVELOPING}; }}
     .badge-focus {{ background: {COLOR_FOCUS}; }}
+    .strategy-table {{ width: 100%; border-collapse: collapse; color: white; background: {CARD_BG}; border-radius: 8px; overflow: hidden; }}
+    .strategy-table th {{ background: {GRID_COLOR}; padding: 12px; text-align: left; font-weight: 900; color: {NEON}; }}
+    .strategy-table td {{ padding: 12px; border-bottom: 1px solid {GRID_COLOR}; }}
+    .lead-box {{ background: {CARD_BG}; border: 2px solid {NEON}; padding: 30px; border-radius: 10px; text-align: center; margin: 20px 0; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -65,6 +71,17 @@ def d_to_t(dec):
     if s >= 60: m += 1; s = 0
     return f"{m:02d}:{s:02d}"
 
+def calculate_age_group(dob):
+    today = date.today()
+    age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    if age < 25: return "16-24"
+    elif age < 30: return "25-29"
+    elif age < 35: return "30-34"
+    elif age < 40: return "35-39"
+    elif age < 45: return "40-44"
+    elif age < 50: return "45-49"
+    return "50-54"
+
 def get_performance_tier_info(gap_sec):
     if gap_sec <= -20: return "PEAK", "badge-peak", COLOR_PEAK
     elif gap_sec <= 0: return "STRONG", "badge-strong", COLOR_STRONG
@@ -76,11 +93,44 @@ def get_local_analysis(inputs, gender, bucket):
     stats_group = HYROX_STATS.get(bucket, HYROX_STATS["75-85min"])[gender_key]
     results = {"targets": {}, "stds": {}}
     for label, key in STATION_METADATA:
-        mean_val, std_val = stats_group.get(key, (5.0, 0.5))
+        mean_val, std_val = stats_group[key]
         results["targets"][label] = mean_val
         results["stds"][label] = std_val
     return results
 
+def generate_report_pdf(mode, results, inputs, finish_time):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, f"GRITYARD x HYROX AI - {mode.upper()} REPORT", ln=True, align='C')
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True, align='C')
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"ATHLETE: {st.session_state.get('lead_name', 'Athlete')}", ln=True)
+    if isinstance(finish_time, tuple):
+        pdf.cell(0, 10, f"PREDICTED RANGE: {d_to_t(finish_time[0])} - {d_to_t(finish_time[1])}", ln=True)
+    else:
+        pdf.cell(0, 10, f"FINISH TIME: {d_to_t(finish_time)}", ln=True)
+    pdf.ln(5)
+    pdf.set_fill_color(223, 255, 0)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(50, 10, "STATION", 1, 0, 'C', True)
+    pdf.cell(40, 10, "ACTUAL", 1, 0, 'C', True)
+    pdf.cell(40, 10, "TARGET", 1, 0, 'C', True)
+    pdf.cell(40, 10, "GAP (SEC)", 1, 1, 'C', True)
+    pdf.set_font("Arial", '', 10)
+    for label, key in STATION_METADATA:
+        act = inputs.get(key, 0)
+        trg = results['targets'].get(label, 0)
+        gap = int((act - trg) * 60)
+        pdf.cell(50, 10, label, 1)
+        pdf.cell(40, 10, d_to_t(act), 1, 0, 'C')
+        pdf.cell(40, 10, d_to_t(trg), 1, 0, 'C')
+        pdf.cell(40, 10, f"{gap:+d}s", 1, 1, 'C')
+    return pdf.output(dest='S').encode('latin-1')
+
+# --- VISUALS ---
 def draw_radar_chart(inputs, targets):
     labels = ["Ski", "Sled P", "Sled L", "Burpees", "Row", "Farmers", "Lunges", "Wall B"]
     angles = np.linspace(0, 2*np.pi, len(labels), endpoint=False).tolist() + [0]
@@ -98,16 +148,19 @@ def draw_radar_chart(inputs, targets):
     st.pyplot(fig); plt.close(fig)
 
 def draw_distribution(station_name, user_val, target_val, sigma, chart_key):
-    x_bins = np.linspace(target_val - 3.5*sigma, target_val + 3.5*sigma, 45)
+    num_bins = 45
+    x_bins = np.linspace(target_val - 3.5*sigma, target_val + 3.5*sigma, num_bins)
     y_bins = norm.pdf(x_bins, target_val, sigma)
     user_bin_idx = np.abs(x_bins - user_val).argmin()
     percentile = (1 - norm.cdf(user_val, target_val, sigma)) * 100
     base_color = RED if "Run" in station_name else CYAN
-    colors = [f"rgba{tuple(int(base_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (0.2,)}" for _ in range(45)]
+    colors = [f"rgba{tuple(int(base_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (0.2,)}" for _ in range(num_bins)]
     colors[user_bin_idx] = NEON
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=x_bins, y=y_bins, marker=dict(color=colors, line=dict(width=0)), width=(x_bins[1] - x_bins[0]) * 0.9, customdata=[d_to_t(val) for val in x_bins], hovertemplate="Split: %{customdata}"))
-    fig.update_layout(title=f"{station_name} | TOP {max(0.1, 100-percentile):.1f}%", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=False, height=300, font=dict(color="white"))
+    fig.add_trace(go.Bar(x=x_bins, y=y_bins, marker=dict(color=colors, line=dict(width=0)), width=(x_bins[1] - x_bins[0]) * 0.9, hovertemplate="<b>Split:</b> %{customdata}<extra></extra>", customdata=[d_to_t(val) for val in x_bins]))
+    fig.add_vline(x=target_val, line_dash="dash", line_color="rgba(255,255,255,0.4)", line_width=1)
+    fig.add_vline(x=user_val, line_color=NEON, line_width=2)
+    fig.update_layout(title=dict(text=f"{station_name.upper()} | TOP {max(0.1, 100-percentile):.1f}%", font=dict(color="white", size=16, weight=900), x=0, y=0.95), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=False, height=350, xaxis=dict(title=dict(text="TIME (MM:SS)", font=dict(color='white')), showgrid=False, ticktext=[d_to_t(val) for val in x_bins[::9]], tickvals=x_bins[::9]), yaxis=dict(showgrid=False, showticklabels=False))
     st.plotly_chart(fig, use_container_width=True, key=chart_key)
 
 def render_heatmap(df_subset, title):
@@ -117,45 +170,87 @@ def render_heatmap(df_subset, title):
         tier_label, badge_class, border_color = get_performance_tier_info(gap)
         st.markdown(f"""
         <div class="performance-card" style="border-left: 4px solid {border_color};">
-            <div style="display:flex; justify-content:space-between;">
-                <div><b>{row['Station'].upper()}</b><br><small>Target: {d_to_t(row['Target'])}</small></div>
-                <div style="text-align:right;"><b style="color:{NEON};">{d_to_t(row['Actual'])}</b><br><span class="status-badge {badge_class}">{tier_label}</span></div>
+            <div style="display:flex; justify-content:space-between; align-items:start;">
+                <div><div style="font-size: 0.9em; font-weight: 800; color: white;">{row['Station'].upper()}</div>
+                <div style="font-size: 0.75em; color: rgba(255,255,255,0.4);">Target: {d_to_t(row['Target'])}</div></div>
+                <div style="text-align: right;"><div style="font-size: 1.1em; font-weight: 900; color: {NEON};">{d_to_t(row['Actual'])}</div>
+                <span class="status-badge {badge_class}">{tier_label}</span></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+# --- LEAD MAGNET (GSheets Disabled) ---
+def render_lead_form(unique_key):
+    st.markdown(f"""
+    <div class="lead-box">
+        <h2 style="color:{NEON} !important;">🔓 UNLOCK FULL PERFORMANCE AUDIT</h2>
+        <p>Submit your details to see the <b>Deep Comparison</b> and get your <b>Custom PDF Strategy</b>.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.form(f"magnet_form_{unique_key}"):
+        col_n, col_w = st.columns(2)
+        name = col_n.text_input("Full Name")
+        whatsapp = col_w.text_input("WhatsApp Number")
+        struggle = st.selectbox("Bottleneck?", ["Running Pace", "Sled Power", "Wall Ball Stamina", "Transitions"])
+        
+        if st.form_submit_button("GET MY FULL REPORT"):
+            if name and whatsapp:
+                # LOCAL SAVE ONLY TO PREVENT GSHEETS ERRORS
+                st.session_state.lead_submitted = True
+                st.session_state.lead_name = name
+                st.toast("✅ Analysis Unlocked!", icon='🚀')
+                st.rerun()
 
 def render_ui_block(mode):
     res, inputs = st.session_state[f'{mode}_results'], st.session_state[f'{mode}_inputs']
     if res and inputs:
         st.divider()
         gaps_df = pd.DataFrame([{"Station": l, "Actual": inputs.get(k, 5.0), "Target": res['targets'].get(l, 5.0), "Gap_Sec": (inputs.get(k, 5.0)-res['targets'].get(l, 5.0))*60} for l, k in STATION_METADATA])
-        
         finish_val = st.session_state.get(f'{mode}_actual_finish')
+        
+        c1, c2, c3 = st.columns([2, 1, 1])
         if isinstance(finish_val, tuple):
-             st.metric("PREDICTED FINISH RANGE", f"{d_to_t(finish_val[0])} - {d_to_t(finish_val[1])}")
+             c1.metric("PREDICTED FINISH RANGE", f"{d_to_t(finish_val[0])} - {d_to_t(finish_val[1])}")
         else:
-             st.metric("FINISH TIME", d_to_t(finish_val))
+             c1.metric("FINISH TIME", d_to_t(finish_val))
 
+        st.markdown("### 🎯 PERFORMANCE BALANCE")
         rc1, rc2, rc3 = st.columns([1, 4, 1])
         with rc2: draw_radar_chart(inputs, res.get('targets', {}))
         
-        c1, c2 = st.columns(2)
-        with c1: render_heatmap(gaps_df[gaps_df['Station'].str.contains("Run")], "RUN ENGINE")
-        with c2: render_heatmap(gaps_df[~gaps_df['Station'].str.contains("Run")], "STATION POWER")
+        st.divider()
+        st.markdown("### ⚡ STATION BREAKDOWN")
+        card_col1, card_col2 = st.columns(2)
+        with card_col1: render_heatmap(gaps_df[gaps_df['Station'].str.contains("Run")], "RUN ENGINE")
+        with card_col2: render_heatmap(gaps_df[~gaps_df['Station'].str.contains("Run")], "STATION POWER")
 
-        for _, row in gaps_df.iterrows(): 
-            draw_distribution(row['Station'], row['Actual'], row['Target'], res['stds'].get(row['Station'], 0.5), f"d_{mode}_{row['Station']}")
+        if not st.session_state.get('lead_submitted', False):
+            render_lead_form(mode)
+        else:
+            st.divider()
+            pdf_bytes = generate_report_pdf(mode, res, inputs, finish_val)
+            st.download_button(f"📩 DOWNLOAD {mode.upper()} AUDIT (PDF)", data=pdf_bytes, file_name=f"hyrox_{mode}.pdf", mime="application/pdf")
+            st.markdown("### 📊 GLOBAL FIELD COMPARISON")
+            for _, row in gaps_df.iterrows(): 
+                sigma = res['stds'].get(row['Station'], 0.5)
+                draw_distribution(row['Station'], row['Actual'], row['Target'], sigma, f"dist_{mode}_{row['Station'].replace(' ', '_')}")
 
 # --- APP ---
 if "profile_saved" not in st.session_state: st.session_state.profile_saved = False
+if "lead_submitted" not in st.session_state: st.session_state.lead_submitted = False
 
 st.sidebar.markdown("## 👤 ATHLETE PROFILE")
 if not st.session_state.profile_saved:
+    u_email = st.sidebar.text_input("Email", "athlete@grityard.com")
     u_gender = st.sidebar.selectbox("Gender", ["MALE", "FEMALE"])
     u_dob = st.sidebar.date_input("DOB", date(1995, 1, 1))
     if st.sidebar.button("SAVE PROFILE"):
-        st.session_state.u_gender = u_gender
+        st.session_state.u_email, st.session_state.u_gender = u_email, u_gender
+        st.session_state.u_age_grp = calculate_age_group(u_dob)
         st.session_state.profile_saved = True; st.rerun()
+else:
+    st.sidebar.info(f"{st.session_state.u_email}\n{st.session_state.u_gender} | {st.session_state.u_age_grp}")
 
 target_window = st.sidebar.selectbox("Benchmark Universe", list(HYROX_STATS.keys()), index=1)
 
@@ -165,7 +260,7 @@ for m in ['analysis', 'prediction', 'goal']:
     if f'{m}_inputs' not in st.session_state: st.session_state[f'{m}_inputs'] = None
 
 if st.session_state.profile_saved:
-    tab1, tab2, tab3 = st.tabs(["📊 ANALYSER", "🔮 PREDICTOR", "🎯 GOALS"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 ANALYSER", "🔮 PREDICTOR", "🎯 GOALS", "🤖 COACH"])
 
     with tab1:
         st.subheader("POST-RACE DATA")
@@ -182,21 +277,25 @@ if st.session_state.profile_saved:
         st.subheader("BENCHMARK PREDICTOR")
         pc1, pc2 = st.columns(2)
         b_run = pc1.text_input("2.4KM RUN (MM:SS)", "09:30")
+        b_ski = pc1.number_input("4-MIN SKI (M)", 850)
+        b_row = pc1.number_input("4-MIN ROW (M)", 1000)
         b_trap = pc2.number_input("7RM TRAPBAR (KG)", 120)
-        b_wb = pc2.number_input("WALL BALLS (Total in 4min)", 80)
+        b_burp = pc2.number_input("4-MIN BURPEE BJ (REPS)", 55)
         rox_in = st.text_input("EST. ROX TIME (MM:SS)", "05:00")
         
         if st.button("PREDICT PERFORMANCE"):
             fresh_1km = (t_to_d(b_run) / 2.4)
-            sim = {f"run_{i+1}": fresh_1km * (1.15 + (i * 0.02)) for i in range(8)}
-            strength_f = 1.0 - (min(b_trap, 200) / 400)
-            for i in range(1, 8): sim[f"work_{i}"] = 4.0 * strength_f + (i * 0.1)
-            wb_pace = 240.0 / max(b_wb, 1)
-            sim["work_8"] = (wb_pace * 100 / 60.0) * 1.15
+            coeffs = [1.02, 1.07, 1.15, 1.25, 1.35, 1.38, 1.48, 1.30]
+            sim = {f"run_{i+1}": fresh_1km * coeffs[i] for i in range(8)}
+            sim.update({
+                "work_1": (1000 / (b_ski / 4)) * 1.12, "work_2": 8.5 - (b_trap / 20),
+                "work_4": 85 / (b_burp / 4), "work_5": (1000 / (b_row / 4)) * 1.10,
+                "work_3": 7.5, "work_6": 2.8, "work_7": 6.5, "work_8": 6.5
+            })
             st.session_state.prediction_results = get_local_analysis(sim, st.session_state.u_gender, target_window)
             st.session_state.prediction_inputs = sim
             mean_finish = sum(sim.values()) + t_to_d(rox_in)
-            st.session_state.prediction_actual_finish = (mean_finish * 0.98, mean_finish * 1.05)
+            st.session_state.prediction_actual_finish = (mean_finish - 2.0, mean_finish + 2.0)
         render_ui_block('prediction')
 
     with tab3:
@@ -204,9 +303,35 @@ if st.session_state.profile_saved:
         t_finish = st.text_input("TARGET FINISH TIME (HH:MM:SS)", "01:10:00")
         if st.button("CALCULATE GOAL"):
             t_m = t_to_d(t_finish)
-            ref = HYROX_STATS[target_window][st.session_state.u_gender.lower()]
-            goal_sim = {k: (ref[k][0] / sum(v[0] for v in ref.values())) * (t_m * 0.94) for _, k in STATION_METADATA}
-            st.session_state.goal_inputs = goal_sim
-            st.session_state.goal_results = get_local_analysis(goal_sim, st.session_state.u_gender, target_window)
+            ref_stats = HYROX_STATS[target_window][st.session_state.u_gender.lower()]
+            bench_total = sum(v[0] for v in ref_stats.values())
+            goal_sim = {k: (ref_stats[k][0] / bench_total) * (t_m * 0.94) for _, k in STATION_METADATA}
+            st.session_state.goal_inputs, st.session_state.goal_results = goal_sim, get_local_analysis(goal_sim, st.session_state.u_gender, target_window)
             st.session_state.goal_actual_finish = t_m
-        render_ui_block('goal')
+        
+        if st.session_state.goal_inputs:
+            if not st.session_state.lead_submitted:
+                render_lead_form("goal")
+            else:
+                c_l, c_r = st.columns(2)
+                for i, (col, filter_k) in enumerate(zip([c_l, c_r], ["run", "work"])):
+                    col.markdown(f"#### {filter_k.upper()}")
+                    html = '<table class="strategy-table"><tr><th>STATION</th><th>SPLIT</th></tr>'
+                    for l, k in STATION_METADATA:
+                        if filter_k in k: html += f'<tr><td>{l}</td><td style="color:{NEON}; font-weight:900;">{d_to_t(st.session_state.goal_inputs[k])}</td></tr>'
+                    col.markdown(html+'</table>', unsafe_allow_html=True)
+
+    with tab4:
+        st.subheader("🤖 COACH")
+        if not st.session_state.lead_submitted:
+            st.warning("Please unlock audit via the Analyzer tab.")
+        else:
+            st.markdown(f"""
+            <div class="lead-box">
+                <h3>VIRTUAL CONSULTATION</h3>
+                <p>Ready to level up your training?</p>
+                <a href="https://wa.me/YOUR_PHONE"><button style="background-color:{NEON}; border:none; padding:10px; width:100%; cursor:pointer; font-weight:900;">DIRECT WHATSAPP CHAT</button></a>
+            </div>
+            """, unsafe_allow_html=True)
+else:
+    st.warning("Please complete your profile.")
