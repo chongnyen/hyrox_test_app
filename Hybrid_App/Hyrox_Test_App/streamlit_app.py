@@ -219,7 +219,7 @@ def render_lead_form(unique_key):
         col_n, col_w = st.columns(2)
         name = col_n.text_input("Full Name")
         whatsapp = col_w.text_input("WhatsApp Number")
-        struggle = st.selectbox("Bottleneck?", ["Running Pace", "Sled Power", "Wall Ball Stamina", "Transitions"])
+        struggle = st.text_input("What's your biggest bottleneck in HYROX? (e.g., running pace, wall balls, transitions)")
         
         if st.form_submit_button("GET MY FULL REPORT"):
             if name and whatsapp:
@@ -273,7 +273,7 @@ st.sidebar.markdown("## 👤 ATHLETE PROFILE")
 if not st.session_state.profile_saved:
     u_email = st.sidebar.text_input("Email", "athlete@grityard.com")
     u_gender = st.sidebar.selectbox("Gender", ["MALE", "FEMALE"])
-    u_dob = st.sidebar.date_input("DOB", date(1995, 1, 1))
+    u_dob = st.sidebar.date_input("DOB", date(1995, 1, 1), min_value=date(1920, 1, 1), max_value=date.today())
     if st.sidebar.button("SAVE PROFILE"):
         st.session_state.u_email, st.session_state.u_gender = u_email, u_gender
         st.session_state.u_age_grp = calculate_age_group(u_dob)
@@ -351,16 +351,166 @@ if st.session_state.profile_saved:
                     col.markdown(html+'</table>', unsafe_allow_html=True)
 
     with tab4:
-        st.subheader("🤖 COACH")
+        st.subheader("🤖 AI PERFORMANCE COACH")
         if not st.session_state.lead_submitted:
-            st.warning("Please unlock audit via the Analyzer tab.")
+            st.warning("⚠️ Complete the Analysis tab first to unlock your AI Coach.")
         else:
-            st.markdown(f"""
-            <div class="lead-box">
-                <h3>VIRTUAL CONSULTATION</h3>
-                <p>Ready to level up your training?</p>
-                <a href="https://wa.me/87105650"><button style="background-color:{NEON}; border:none; padding:10px; width:100%; cursor:pointer; font-weight:900;">DIRECT WHATSAPP CHAT</button></a>
-            </div>
-            """, unsafe_allow_html=True)
+            # Generate AI analysis based on completed analysis
+            if st.session_state.get('analysis_results') and st.session_state.get('analysis_inputs'):
+                res = st.session_state.analysis_results
+                inputs = st.session_state.analysis_inputs
+                
+                # Calculate performance metrics
+                run_gaps = []
+                work_gaps = []
+                for label, key in STATION_METADATA:
+                    gap = (inputs.get(key, 5.0) - res['targets'].get(label, 5.0)) * 60
+                    if "Run" in label:
+                        run_gaps.append((label, gap))
+                    else:
+                        work_gaps.append((label, gap))
+                
+                avg_run_gap = sum(g for _, g in run_gaps) / len(run_gaps)
+                avg_work_gap = sum(g for _, g in work_gaps) / len(work_gaps)
+                
+                # Find biggest weaknesses
+                all_gaps = [(l, g) for l, g in run_gaps + work_gaps]
+                all_gaps.sort(key=lambda x: x[1], reverse=True)
+                top_weaknesses = all_gaps[:3]
+                top_strengths = sorted(all_gaps, key=lambda x: x[1])[:3]
+                
+                # AI Analysis
+                st.markdown("### 📊 YOUR PERFORMANCE PROFILE")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if avg_run_gap < 0:
+                        st.success(f"**RUN ENGINE: STRONG** 💪  \n{abs(int(avg_run_gap))}s ahead of benchmark")
+                    else:
+                        st.error(f"**RUN ENGINE: NEEDS WORK** 🏃  \n{int(avg_run_gap)}s behind benchmark")
+                
+                with col2:
+                    if avg_work_gap < 0:
+                        st.success(f"**STATION POWER: STRONG** 💪  \n{abs(int(avg_work_gap))}s ahead of benchmark")
+                    else:
+                        st.error(f"**STATION POWER: NEEDS WORK** 🔨  \n{int(avg_work_gap)}s behind benchmark")
+                
+                st.divider()
+                
+                # Detailed Analysis
+                st.markdown("### 🎯 CRITICAL INSIGHTS")
+                
+                st.markdown("#### ⚠️ TOP 3 AREAS FOR IMPROVEMENT")
+                for i, (station, gap) in enumerate(top_weaknesses, 1):
+                    if gap > 0:
+                        st.markdown(f"""
+                        <div class="performance-card" style="border-left: 4px solid {COLOR_FOCUS};">
+                            <div style="display:flex; justify-content:space-between;">
+                                <div><strong>{i}. {station}</strong></div>
+                                <div style="color:{COLOR_FOCUS}; font-weight:900;">+{int(gap)}s</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.markdown("#### ✅ TOP 3 STRENGTHS")
+                for i, (station, gap) in enumerate(top_strengths, 1):
+                    if gap <= 0:
+                        st.markdown(f"""
+                        <div class="performance-card" style="border-left: 4px solid {COLOR_PEAK};">
+                            <div style="display:flex; justify-content:space-between;">
+                                <div><strong>{i}. {station}</strong></div>
+                                <div style="color:{COLOR_PEAK}; font-weight:900;">{int(gap)}s</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.divider()
+                
+                # Personalized recommendations
+                st.markdown("### 💡 PERSONALIZED TRAINING RECOMMENDATIONS")
+                
+                # Generate smart recommendations based on weaknesses
+                recommendations = []
+                
+                if avg_run_gap > 15:
+                    recommendations.append({
+                        "title": "🏃 RUNNING VOLUME & PACE WORK",
+                        "detail": "Your run splits are significantly behind benchmark. Focus on: Weekly tempo runs, interval training (400m-800m repeats), and building aerobic base with 3-4 runs per week."
+                    })
+                
+                if any("Sled" in station for station, gap in top_weaknesses):
+                    recommendations.append({
+                        "title": "🔨 LEG STRENGTH & POWER",
+                        "detail": "Sled stations are holding you back. Prioritize: Heavy squats, Bulgarian split squats, sled pushes/pulls 2x weekly, and explosive plyometric work."
+                    })
+                
+                if any("Wall" in station or "Burpee" in station for station, gap in top_weaknesses):
+                    recommendations.append({
+                        "title": "💪 CONDITIONING & MUSCULAR ENDURANCE",
+                        "detail": "High-rep stations need work. Add: EMOM wall balls, burpee conditioning, and longer AMRAP sessions to build work capacity under fatigue."
+                    })
+                
+                if any("Ski" in station or "Row" in station for station, gap in top_weaknesses):
+                    recommendations.append({
+                        "title": "🚣 UPPER BODY POWER & TECHNIQUE",
+                        "detail": "Erg performance needs refinement. Focus on: Technique drills, interval training on ski/rower, and upper body pulling strength (pull-ups, rows)."
+                    })
+                
+                # Display recommendations
+                for rec in recommendations:
+                    with st.expander(rec["title"], expanded=True):
+                        st.write(rec["detail"])
+                
+                st.divider()
+                
+                # CTA for personal training
+                st.markdown(f"""
+                <div class="lead-box">
+                    <h2 style="color:{NEON} !important;">🚀 READY TO LEVEL UP?</h2>
+                    <p style="font-size: 1.1em; margin: 20px 0;">
+                        Your data shows <strong>clear opportunities for improvement</strong>. 
+                        Our expert coaches can create a personalized HYROX training program 
+                        designed specifically for YOUR weaknesses.
+                    </p>
+                    <p style="font-size: 0.95em; color: rgba(255,255,255,0.7); margin-bottom: 25px;">
+                        ✅ Custom training plans<br>
+                        ✅ 1-on-1 coaching sessions<br>
+                        ✅ Race-day strategy & pacing<br>
+                        ✅ Accountability & progress tracking
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Contact form for PT inquiry
+                with st.form("pt_inquiry_form"):
+                    st.markdown("#### 📞 GET YOUR FREE CONSULTATION")
+                    inq_name = st.text_input("Name", value=st.session_state.get('lead_name', ''))
+                    inq_contact = st.text_input("WhatsApp / Phone")
+                    inq_goal = st.selectbox("Primary Goal", [
+                        "Break 60 minutes",
+                        "Break 75 minutes", 
+                        "Break 90 minutes",
+                        "First HYROX completion",
+                        "Podium finish"
+                    ])
+                    inq_notes = st.text_area("Tell us about your training background (optional)")
+                    
+                    if st.form_submit_button("BOOK FREE CONSULTATION"):
+                        if inq_name and inq_contact:
+                            # Save PT inquiry to Google Sheets
+                            try:
+                                sheet = init_gsheets()
+                                if sheet:
+                                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                    row = [timestamp, inq_name, inq_contact, inq_goal, inq_notes, "PT_INQUIRY"]
+                                    sheet.append_row(row)
+                                    st.success("✅ Consultation request received! Our team will contact you within 24 hours.")
+                            except Exception as e:
+                                st.error(f"Error submitting request: {e}")
+                        else:
+                            st.error("Please fill in your name and contact details.")
+            
+            else:
+                st.info("💡 Complete a race analysis in the ANALYSER tab to unlock personalized coaching insights.")
 else:
     st.warning("Please complete your profile.")
