@@ -113,7 +113,279 @@ def get_performance_tier_info(gap_sec):
     if gap_sec <= -20: return "PEAK", "badge-peak", COLOR_PEAK
     elif gap_sec <= 0: return "STRONG", "badge-strong", COLOR_STRONG
     elif gap_sec <= 20: return "DEVELOPING", "badge-developing", COLOR_DEVELOPING
-    else: return "FOCUS", "badge-focus", COLOR_FOCUS
+    else:
+    st.sidebar.info(f"{st.session_state.u_email}\n{st.session_state.u_gender} | {st.session_state.u_age_grp}")
+
+target_window = st.sidebar.selectbox("Benchmark Universe", list(HYROX_STATS.keys()), index=1)
+
+st.title("🏃‍♂️ GRITYARD x GRITRox AI")
+st.markdown("*Built by Athletes, Designed for You*")
+st.divider()
+
+for m in ['analysis', 'prediction', 'goal']:
+    if f'{m}_results' not in st.session_state: st.session_state[f'{m}_results'] = None
+    if f'{m}_inputs' not in st.session_state: st.session_state[f'{m}_inputs'] = None
+
+if st.session_state.profile_saved:
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 ANALYSER", "🔮 PREDICTOR", "🎯 GOALS", "🤖 COACH"])
+
+    with tab1:
+        st.subheader("POST-RACE DATA")
+        race_t = st.text_input("CHIP TIME (HH:MM:SS)", "01:15:00")
+        c1, c2, c3 = st.columns(3)
+        manual = {k: [c1, c2, c3][i % 3].text_input(l, "05:00", key=f"a_{k}") for i, (l, k) in enumerate(STATION_METADATA)}
+        if st.button("ANALYSE MY RACE"):
+            clean = {k: t_to_d(v) for k, v in manual.items()}
+            st.session_state.analysis_results = get_local_analysis(clean, st.session_state.u_gender, target_window)
+            st.session_state.analysis_inputs, st.session_state.analysis_actual_finish = clean, t_to_d(race_t)
+        render_ui_block('analysis')
+
+    with tab2:
+        st.subheader("BENCHMARK PREDICTOR")
+        pc1, pc2 = st.columns(2)
+        b_run = pc1.text_input("2.4KM RUN (MM:SS)", "09:30")
+        b_ski = pc1.number_input("4-MIN SKI (M)", 850)
+        b_row = pc1.number_input("4-MIN ROW (M)", 1000)
+        b_trap = pc2.number_input("7RM TRAPBAR (KG)", 120)
+        b_burp = pc2.number_input("4-MIN BURPEE BJ (REPS)", 55)
+        rox_in = st.text_input("EST. ROX TIME (MM:SS)", "05:00")
+        
+        if st.button("PREDICT PERFORMANCE"):
+            fresh_1km = (t_to_d(b_run) / 2.4)
+            coeffs = [1.02, 1.07, 1.15, 1.25, 1.35, 1.38, 1.48, 1.30]
+            sim = {f"run_{i+1}": fresh_1km * coeffs[i] for i in range(8)}
+            sim.update({
+                "work_1": (1000 / (b_ski / 4)) * 1.12, "work_2": 8.5 - (b_trap / 20),
+                "work_4": 85 / (b_burp / 4), "work_5": (1000 / (b_row / 4)) * 1.10,
+                "work_3": 7.5, "work_6": 2.8, "work_7": 6.5, "work_8": 6.5
+            })
+            st.session_state.prediction_results = get_local_analysis(sim, st.session_state.u_gender, target_window)
+            st.session_state.prediction_inputs = sim
+            mean_finish = sum(sim.values()) + t_to_d(rox_in)
+            st.session_state.prediction_actual_finish = (mean_finish - 2.0, mean_finish + 2.0)
+        render_ui_block('prediction')
+
+    with tab3:
+        st.subheader("🎯 RACE PACING BLUEPRINT")
+        t_finish = st.text_input("TARGET FINISH TIME (HH:MM:SS)", "01:10:00")
+        if st.button("CALCULATE GOAL"):
+            t_m = t_to_d(t_finish)
+            ref_stats = HYROX_STATS[target_window][st.session_state.u_gender.lower()]
+            bench_total = sum(v[0] for v in ref_stats.values())
+            goal_sim = {k: (ref_stats[k][0] / bench_total) * (t_m * 0.94) for _, k in STATION_METADATA}
+            st.session_state.goal_inputs, st.session_state.goal_results = goal_sim, get_local_analysis(goal_sim, st.session_state.u_gender, target_window)
+            st.session_state.goal_actual_finish = t_m
+        
+        if st.session_state.goal_inputs:
+            if not st.session_state.lead_submitted:
+                render_lead_form("goal")
+            else:
+                c_l, c_r = st.columns(2)
+                for i, (col, filter_k) in enumerate(zip([c_l, c_r], ["run", "work"])):
+                    col.markdown(f"#### {filter_k.upper()}")
+                    html = '<table class="strategy-table"><tr><th>STATION</th><th>SPLIT</th></tr>'
+                    for l, k in STATION_METADATA:
+                        if filter_k in k: html += f'<tr><td>{l}</td><td style="color:{NEON}; font-weight:900;">{d_to_t(st.session_state.goal_inputs[k])}</td></tr>'
+                    col.markdown(html+'</table>', unsafe_allow_html=True)
+
+    with tab4:
+        st.subheader("🤖 AI PERFORMANCE COACH")
+        if not st.session_state.lead_submitted:
+            st.warning("⚠️ Complete the Analysis tab first to unlock your AI Coach.")
+        else:
+            # Generate AI analysis based on completed analysis
+            if st.session_state.get('analysis_results') and st.session_state.get('analysis_inputs'):
+                res = st.session_state.analysis_results
+                inputs = st.session_state.analysis_inputs
+                
+                # Calculate performance metrics
+                run_gaps = []
+                work_gaps = []
+                for label, key in STATION_METADATA:
+                    gap = (inputs.get(key, 5.0) - res['targets'].get(label, 5.0)) * 60
+                    if "Run" in label:
+                        run_gaps.append((label, gap))
+                    else:
+                        work_gaps.append((label, gap))
+                
+                avg_run_gap = sum(g for _, g in run_gaps) / len(run_gaps)
+                avg_work_gap = sum(g for _, g in work_gaps) / len(work_gaps)
+                
+                # Find biggest weaknesses
+                all_gaps = [(l, g) for l, g in run_gaps + work_gaps]
+                all_gaps.sort(key=lambda x: x[1], reverse=True)
+                top_weaknesses = all_gaps[:3]
+                top_strengths = sorted(all_gaps, key=lambda x: x[1])[:3]
+                
+                # AI Analysis
+                st.markdown("### 📊 YOUR PERFORMANCE PROFILE")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if avg_run_gap < 0:
+                        st.success(f"**RUN ENGINE: STRONG** 💪  \n{abs(int(avg_run_gap))}s ahead of benchmark")
+                    else:
+                        st.error(f"**RUN ENGINE: NEEDS WORK** 🏃  \n{int(avg_run_gap)}s behind benchmark")
+                
+                with col2:
+                    if avg_work_gap < 0:
+                        st.success(f"**STATION POWER: STRONG** 💪  \n{abs(int(avg_work_gap))}s ahead of benchmark")
+                    else:
+                        st.error(f"**STATION POWER: NEEDS WORK** 🔨  \n{int(avg_work_gap)}s behind benchmark")
+                
+                st.divider()
+                
+                # Detailed Analysis
+                st.markdown("### 🎯 CRITICAL INSIGHTS")
+                
+                st.markdown("#### ⚠️ TOP 3 AREAS FOR IMPROVEMENT")
+                for i, (station, gap) in enumerate(top_weaknesses, 1):
+                    if gap > 0:
+                        st.markdown(f"""
+                        <div class="performance-card" style="border-left: 4px solid {COLOR_FOCUS};">
+                            <div style="display:flex; justify-content:space-between;">
+                                <div><strong>{i}. {station}</strong></div>
+                                <div style="color:{COLOR_FOCUS}; font-weight:900;">+{int(gap)}s</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.markdown("#### ✅ TOP 3 STRENGTHS")
+                for i, (station, gap) in enumerate(top_strengths, 1):
+                    if gap <= 0:
+                        st.markdown(f"""
+                        <div class="performance-card" style="border-left: 4px solid {COLOR_PEAK};">
+                            <div style="display:flex; justify-content:space-between;">
+                                <div><strong>{i}. {station}</strong></div>
+                                <div style="color:{COLOR_PEAK}; font-weight:900;">{int(gap)}s</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.divider()
+                
+                # Personalized recommendations
+                st.markdown("### 💡 PERSONALIZED TRAINING RECOMMENDATIONS")
+                
+                # Generate smart recommendations based on weaknesses
+                recommendations = []
+                
+                if avg_run_gap > 15:
+                    recommendations.append({
+                        "title": "🏃 RUNNING VOLUME & PACE WORK",
+                        "detail": "Your run splits are significantly behind benchmark. Focus on: Weekly tempo runs, interval training (400m-800m repeats), and building aerobic base with 3-4 runs per week."
+                    })
+                
+                if any("Sled" in station for station, gap in top_weaknesses):
+                    recommendations.append({
+                        "title": "🔨 LEG STRENGTH & POWER",
+                        "detail": "Sled stations are holding you back. Prioritize: Heavy squats, Bulgarian split squats, sled pushes/pulls 2x weekly, and explosive plyometric work."
+                    })
+                
+                if any("Wall" in station or "Burpee" in station for station, gap in top_weaknesses):
+                    recommendations.append({
+                        "title": "💪 CONDITIONING & MUSCULAR ENDURANCE",
+                        "detail": "High-rep stations need work. Add: EMOM wall balls, burpee conditioning, and longer AMRAP sessions to build work capacity under fatigue."
+                    })
+                
+                if any("Ski" in station or "Row" in station for station, gap in top_weaknesses):
+                    recommendations.append({
+                        "title": "🚣 UPPER BODY POWER & TECHNIQUE",
+                        "detail": "Erg performance needs refinement. Focus on: Technique drills, interval training on ski/rower, and upper body pulling strength (pull-ups, rows)."
+                    })
+                
+                # Display recommendations
+                for rec in recommendations:
+                    with st.expander(rec["title"], expanded=True):
+                        st.write(rec["detail"])
+                
+                st.divider()
+                
+                # CTA for PT
+                st.markdown(f"""
+                <div class="lead-box">
+                    <h2 style="color:{NEON} !important;">🎯 GET PERSONALIZED COACHING</h2>
+                    <p style="font-size: 1.1em; margin: 20px 0;">
+                        Your analysis reveals <strong>specific areas that need expert attention</strong>. 
+                        Work with GRITYARD's elite coaches through <strong>Personal Training</strong>—
+                        designed specifically for GRITRox athletes like you.
+                    </p>
+                    <p style="font-size: 0.95em; color: rgba(255,255,255,0.7); margin-bottom: 15px;">
+                        ✅ Custom GRITRox training programs tailored to YOUR weaknesses<br>
+                        ✅ 1-on-1 coaching sessions (in-person or online)<br>
+                        ✅ Race strategy & pacing plans<br>
+                        ✅ Form checks & technique corrections<br>
+                        ✅ Accountability & progress tracking
+                    </p>
+                    <p style="font-size: 0.85em; color: rgba(255,255,255,0.5); margin-bottom: 20px;">
+                        <em>Train at GRITYARD gym or remotely—with guidance from coaches who've trained competitive athletes.</em>
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Contact form for PT inquiry
+                with st.form("pt_inquiry_form"):
+                    st.markdown("#### 📞 SCHEDULE YOUR FREE CONSULTATION")
+                    inq_name = st.text_input("Name", value=st.session_state.get('lead_name', ''))
+                    inq_contact = st.text_input("WhatsApp / Phone")
+                    
+                    col_goal, col_pref = st.columns(2)
+                    inq_goal = col_goal.selectbox("GRITRox Goal", [
+                        "Break 60 minutes",
+                        "Break 75 minutes", 
+                        "Break 90 minutes",
+                        "First race completion",
+                        "Podium finish / Elite performance"
+                    ])
+                    inq_preference = col_pref.selectbox("Training Preference", [
+                        "In-Person PT at GRITYARD",
+                        "Online PT (Remote)",
+                        "Hybrid (Mix of both)",
+                        "Not sure yet"
+                    ])
+                    
+                    inq_availability = st.selectbox("Preferred Session Time", [
+                        "Weekday mornings (6-10am)",
+                        "Weekday evenings (6-9pm)",
+                        "Weekends",
+                        "Flexible"
+                    ])
+                    inq_notes = st.text_area("Tell us about your training background & current fitness level (optional)")
+                    
+                    if st.form_submit_button("BOOK FREE CONSULTATION"):
+                        if inq_name and inq_contact:
+                            # Save PT inquiry to Google Sheets
+                            try:
+                                sheet = init_gsheets()
+                                if sheet:
+                                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                    row = [timestamp, inq_name, inq_contact, inq_goal, inq_preference, inq_availability, inq_notes, "PT_INQUIRY"]
+                                    sheet.append_row(row)
+                                    st.success("✅ Consultation request received! Our coaching team will contact you within 24 hours to discuss your personalized training plan.")
+                            except Exception as e:
+                                st.error(f"Error submitting request: {e}")
+                        else:
+                            st.error("Please fill in your name and contact details.")
+            
+            else:
+                st.info("💡 Complete a race analysis in the ANALYSER tab to unlock personalized coaching insights.")
+else:
+    st.warning("Please complete your profile.")
+
+# Footer
+st.divider()
+st.markdown(f"""
+<div style="text-align: center; padding: 30px; color: rgba(255,255,255,0.6);">
+    <p style="margin-bottom: 10px;">Powered by <strong style="color:{NEON};">GRITYARD</strong> | Personal Training</p>
+    <p style="font-size: 0.85em;">676 Geylang Road, Singapore 389603 | contact@grityard.com | +65 9112 6768</p>
+    <p style="font-size: 0.85em; margin-top: 10px;">
+        <a href="https://www.grityard.com" target="_blank" style="color:{NEON}; text-decoration:none;">Visit GRITYARD.com</a>
+    </p>
+    <p style="font-size: 0.75em; margin-top: 15px; color: rgba(255,255,255,0.4);">
+        GRITRox is a GRITYARD training methodology. Not affiliated with HYROX GmbH.
+    </p>
+</div>
+""", unsafe_allow_html=True): return "FOCUS", "badge-focus", COLOR_FOCUS
 
 def get_local_analysis(inputs, gender, bucket):
     gender_key = gender.lower()
