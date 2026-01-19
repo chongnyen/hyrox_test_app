@@ -155,7 +155,7 @@ def generate_report_pdf(mode, results, inputs, finish_time):
         pdf.cell(40, 10, d_to_t(act), 1, 0, 'C')
         pdf.cell(40, 10, d_to_t(trg), 1, 0, 'C')
         pdf.cell(40, 10, f"{gap:+d}s", 1, 1, 'C')
-    return pdf.output()
+    return bytes(pdf.output())
 
 # --- VISUALS ---
 def draw_radar_chart(inputs, targets):
