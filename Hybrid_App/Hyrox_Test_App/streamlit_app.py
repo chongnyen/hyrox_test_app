@@ -279,4 +279,88 @@ if not st.session_state.profile_saved:
         st.session_state.u_age_grp = calculate_age_group(u_dob)
         st.session_state.profile_saved = True; st.rerun()
 else:
-    st.sidebar.info(f"{st.session_state.u_email}\n{st.session_state.u_gender} | {st.session_state.u_age_gr
+    st.sidebar.info(f"{st.session_state.u_email}\n{st.session_state.u_gender} | {st.session_state.u_age_grp}")
+
+target_window = st.sidebar.selectbox("Benchmark Universe", list(HYROX_STATS.keys()), index=1)
+
+st.title("🏃‍♂️ GRITYARD x HYROX AI")
+for m in ['analysis', 'prediction', 'goal']:
+    if f'{m}_results' not in st.session_state: st.session_state[f'{m}_results'] = None
+    if f'{m}_inputs' not in st.session_state: st.session_state[f'{m}_inputs'] = None
+
+if st.session_state.profile_saved:
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 ANALYSER", "🔮 PREDICTOR", "🎯 GOALS", "🤖 COACH"])
+
+    with tab1:
+        st.subheader("POST-RACE DATA")
+        race_t = st.text_input("CHIP TIME (HH:MM:SS)", "01:15:00")
+        c1, c2, c3 = st.columns(3)
+        manual = {k: [c1, c2, c3][i % 3].text_input(l, "05:00", key=f"a_{k}") for i, (l, k) in enumerate(STATION_METADATA)}
+        if st.button("ANALYSE MY RACE"):
+            clean = {k: t_to_d(v) for k, v in manual.items()}
+            st.session_state.analysis_results = get_local_analysis(clean, st.session_state.u_gender, target_window)
+            st.session_state.analysis_inputs, st.session_state.analysis_actual_finish = clean, t_to_d(race_t)
+        render_ui_block('analysis')
+
+    with tab2:
+        st.subheader("BENCHMARK PREDICTOR")
+        pc1, pc2 = st.columns(2)
+        b_run = pc1.text_input("2.4KM RUN (MM:SS)", "09:30")
+        b_ski = pc1.number_input("4-MIN SKI (M)", 850)
+        b_row = pc1.number_input("4-MIN ROW (M)", 1000)
+        b_trap = pc2.number_input("7RM TRAPBAR (KG)", 120)
+        b_burp = pc2.number_input("4-MIN BURPEE BJ (REPS)", 55)
+        rox_in = st.text_input("EST. ROX TIME (MM:SS)", "05:00")
+        
+        if st.button("PREDICT PERFORMANCE"):
+            fresh_1km = (t_to_d(b_run) / 2.4)
+            coeffs = [1.02, 1.07, 1.15, 1.25, 1.35, 1.38, 1.48, 1.30]
+            sim = {f"run_{i+1}": fresh_1km * coeffs[i] for i in range(8)}
+            sim.update({
+                "work_1": (1000 / (b_ski / 4)) * 1.12, "work_2": 8.5 - (b_trap / 20),
+                "work_4": 85 / (b_burp / 4), "work_5": (1000 / (b_row / 4)) * 1.10,
+                "work_3": 7.5, "work_6": 2.8, "work_7": 6.5, "work_8": 6.5
+            })
+            st.session_state.prediction_results = get_local_analysis(sim, st.session_state.u_gender, target_window)
+            st.session_state.prediction_inputs = sim
+            mean_finish = sum(sim.values()) + t_to_d(rox_in)
+            st.session_state.prediction_actual_finish = (mean_finish - 2.0, mean_finish + 2.0)
+        render_ui_block('prediction')
+
+    with tab3:
+        st.subheader("🎯 RACE PACING BLUEPRINT")
+        t_finish = st.text_input("TARGET FINISH TIME (HH:MM:SS)", "01:10:00")
+        if st.button("CALCULATE GOAL"):
+            t_m = t_to_d(t_finish)
+            ref_stats = HYROX_STATS[target_window][st.session_state.u_gender.lower()]
+            bench_total = sum(v[0] for v in ref_stats.values())
+            goal_sim = {k: (ref_stats[k][0] / bench_total) * (t_m * 0.94) for _, k in STATION_METADATA}
+            st.session_state.goal_inputs, st.session_state.goal_results = goal_sim, get_local_analysis(goal_sim, st.session_state.u_gender, target_window)
+            st.session_state.goal_actual_finish = t_m
+        
+        if st.session_state.goal_inputs:
+            if not st.session_state.lead_submitted:
+                render_lead_form("goal")
+            else:
+                c_l, c_r = st.columns(2)
+                for i, (col, filter_k) in enumerate(zip([c_l, c_r], ["run", "work"])):
+                    col.markdown(f"#### {filter_k.upper()}")
+                    html = '<table class="strategy-table"><tr><th>STATION</th><th>SPLIT</th></tr>'
+                    for l, k in STATION_METADATA:
+                        if filter_k in k: html += f'<tr><td>{l}</td><td style="color:{NEON}; font-weight:900;">{d_to_t(st.session_state.goal_inputs[k])}</td></tr>'
+                    col.markdown(html+'</table>', unsafe_allow_html=True)
+
+    with tab4:
+        st.subheader("🤖 COACH")
+        if not st.session_state.lead_submitted:
+            st.warning("Please unlock audit via the Analyzer tab.")
+        else:
+            st.markdown(f"""
+            <div class="lead-box">
+                <h3>VIRTUAL CONSULTATION</h3>
+                <p>Ready to level up your training?</p>
+                <a href="https://wa.me/YOUR_PHONE"><button style="background-color:{NEON}; border:none; padding:10px; width:100%; cursor:pointer; font-weight:900;">DIRECT WHATSAPP CHAT</button></a>
+            </div>
+            """, unsafe_allow_html=True)
+else:
+    st.warning("Please complete your profile.")
