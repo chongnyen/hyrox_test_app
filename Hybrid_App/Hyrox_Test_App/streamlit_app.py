@@ -113,7 +113,172 @@ def get_performance_tier_info(gap_sec):
     if gap_sec <= -20: return "PEAK", "badge-peak", COLOR_PEAK
     elif gap_sec <= 0: return "STRONG", "badge-strong", COLOR_STRONG
     elif gap_sec <= 20: return "DEVELOPING", "badge-developing", COLOR_DEVELOPING
+    else: return "FOCUS", "badge-focus", COLOR_FOCUS
+
+def get_local_analysis(inputs, gender, bucket):
+    gender_key = gender.lower()
+    stats_group = HYROX_STATS.get(bucket, HYROX_STATS["75-85min"])[gender_key]
+    results = {"targets": {}, "stds": {}}
+    for label, key in STATION_METADATA:
+        mean_val, std_val = stats_group[key]
+        results["targets"][label] = mean_val
+        results["stds"][label] = std_val
+    return results
+
+def generate_report_pdf(mode, results, inputs, finish_time):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, f"GRITYARD x GRITRox - {mode.upper()} REPORT", ln=True, align='C')
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True, align='C')
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"ATHLETE: {st.session_state.get('lead_name', 'Athlete')}", ln=True)
+    if isinstance(finish_time, tuple):
+        pdf.cell(0, 10, f"PREDICTED RANGE: {d_to_t(finish_time[0])} - {d_to_t(finish_time[1])}", ln=True)
     else:
+        pdf.cell(0, 10, f"FINISH TIME: {d_to_t(finish_time)}", ln=True)
+    pdf.ln(5)
+    pdf.set_fill_color(255, 107, 53)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(50, 10, "STATION", 1, 0, 'C', True)
+    pdf.cell(40, 10, "ACTUAL", 1, 0, 'C', True)
+    pdf.cell(40, 10, "TARGET", 1, 0, 'C', True)
+    pdf.cell(40, 10, "GAP (SEC)", 1, 1, 'C', True)
+    pdf.set_font("Arial", '', 10)
+    for label, key in STATION_METADATA:
+        act = inputs.get(key, 0)
+        trg = results['targets'].get(label, 0)
+        gap = int((act - trg) * 60)
+        pdf.cell(50, 10, label, 1)
+        pdf.cell(40, 10, d_to_t(act), 1, 0, 'C')
+        pdf.cell(40, 10, d_to_t(trg), 1, 0, 'C')
+        pdf.cell(40, 10, f"{gap:+d}s", 1, 1, 'C')
+    return bytes(pdf.output())
+
+# --- VISUALS ---
+def draw_radar_chart(inputs, targets):
+    labels = ["Ski", "Sled P", "Sled L", "Burpees", "Row", "Farmers", "Lunges", "Wall B"]
+    angles = np.linspace(0, 2*np.pi, len(labels), endpoint=False).tolist() + [0]
+    key_map = {"work_1": "Ski Erg", "work_2": "Sled Push", "work_3": "Sled Pull", "work_4": "Burpees", "work_5": "Rowing", "work_6": "Farmers Carry", "work_7": "Sandbag Lunges", "work_8": "Wall Balls"}
+    def get_norm(val, t_val): return np.clip(t_val / val if val > 0 else 0.5, 0.2, 1.2)
+    w_scores = [get_norm(inputs.get(f"work_{i}", 5.0), targets.get(key_map[f"work_{i}"], 5.0)) for i in range(1, 9)] + [get_norm(inputs.get("work_1", 5.0), targets.get("Ski Erg", 5.0))]
+    r_scores = [get_norm(inputs.get(f"run_{i}", 5.0), targets.get(f"Run {i}", 5.0)) for i in range(1, 9)] + [get_norm(inputs.get("run_1", 5.0), targets.get("Run 1", 5.0))]
+    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True), facecolor=DARK_BG)
+    ax.set_facecolor(CARD_BG); ax.spines['polar'].set_color(GRID_COLOR)
+    ax.plot(angles, r_scores, color=RED, linewidth=4, label="RUN ENGINE", marker='o')
+    ax.plot(angles, w_scores, color=CYAN, linewidth=4, label="STATION POWER", marker='s')
+    ax.plot(angles, [1.0]*len(angles), color=NEON, linestyle='--', linewidth=2, label="BENCHMARK")
+    ax.set_xticks(angles[:-1]); ax.set_xticklabels(labels, color='white', size=12, fontweight='bold')
+    ax.set_yticklabels([]); ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), facecolor=CARD_BG, labelcolor='white')
+    st.pyplot(fig); plt.close(fig)
+
+def draw_distribution(station_name, user_val, target_val, sigma, chart_key):
+    num_bins = 45
+    x_bins = np.linspace(target_val - 3.5*sigma, target_val + 3.5*sigma, num_bins)
+    y_bins = norm.pdf(x_bins, target_val, sigma)
+    user_bin_idx = np.abs(x_bins - user_val).argmin()
+    percentile = (1 - norm.cdf(user_val, target_val, sigma)) * 100
+    base_color = RED if "Run" in station_name else CYAN
+    colors = [f"rgba{tuple(int(base_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (0.2,)}" for _ in range(num_bins)]
+    colors[user_bin_idx] = NEON
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=x_bins, y=y_bins, marker=dict(color=colors, line=dict(width=0)), width=(x_bins[1] - x_bins[0]) * 0.9, hovertemplate="<b>Split:</b> %{customdata}<extra></extra>", customdata=[d_to_t(val) for val in x_bins]))
+    fig.add_vline(x=target_val, line_dash="dash", line_color="rgba(255,255,255,0.4)", line_width=1)
+    fig.add_vline(x=user_val, line_color=NEON, line_width=2)
+    fig.update_layout(title=dict(text=f"{station_name.upper()} | TOP {max(0.1, 100-percentile):.1f}%", font=dict(color="white", size=16, weight=900), x=0, y=0.95), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=False, height=350, xaxis=dict(title=dict(text="TIME (MM:SS)", font=dict(color='white')), showgrid=False, ticktext=[d_to_t(val) for val in x_bins[::9]], tickvals=x_bins[::9]), yaxis=dict(showgrid=False, showticklabels=False))
+    st.plotly_chart(fig, use_container_width=True, key=chart_key)
+
+def render_heatmap(df_subset, title):
+    st.markdown(f"#### {title}")
+    for _, row in df_subset.iterrows():
+        gap = row['Gap_Sec']
+        tier_label, badge_class, border_color = get_performance_tier_info(gap)
+        st.markdown(f"""
+        <div class="performance-card" style="border-left: 4px solid {border_color};">
+            <div style="display:flex; justify-content:space-between; align-items:start;">
+                <div><div style="font-size: 0.9em; font-weight: 800; color: white;">{row['Station'].upper()}</div>
+                <div style="font-size: 0.75em; color: rgba(255,255,255,0.4);">Target: {d_to_t(row['Target'])}</div></div>
+                <div style="text-align: right;"><div style="font-size: 1.1em; font-weight: 900; color: {NEON};">{d_to_t(row['Actual'])}</div>
+                <span class="status-badge {badge_class}">{tier_label}</span></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# --- LEAD MAGNET ---
+def render_lead_form(unique_key):
+    st.markdown(f"""
+    <div class="lead-box">
+        <h2 style="color:{NEON} !important;">🔓 UNLOCK FULL PERFORMANCE AUDIT</h2>
+        <p>Submit your details to see the <b>Deep Comparison</b> and get your <b>Custom PDF Strategy</b>.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.form(f"magnet_form_{unique_key}"):
+        col_n, col_w = st.columns(2)
+        name = col_n.text_input("Full Name")
+        whatsapp = col_w.text_input("WhatsApp Number")
+        struggle = st.text_input("What's your biggest bottleneck in GRITRox? (e.g., running pace, wall balls, transitions)")
+        
+        if st.form_submit_button("GET MY FULL REPORT"):
+            if name and whatsapp:
+                if save_lead_to_sheet(name, whatsapp, struggle):
+                    st.session_state.lead_submitted = True
+                    st.session_state.lead_name = name
+                    st.toast("✅ Analysis Unlocked!", icon='🚀')
+                    st.rerun()
+                else:
+                    st.error("Failed to save. Please try again.")
+
+def render_ui_block(mode):
+    res, inputs = st.session_state[f'{mode}_results'], st.session_state[f'{mode}_inputs']
+    if res and inputs:
+        st.divider()
+        gaps_df = pd.DataFrame([{"Station": l, "Actual": inputs.get(k, 5.0), "Target": res['targets'].get(l, 5.0), "Gap_Sec": (inputs.get(k, 5.0)-res['targets'].get(l, 5.0))*60} for l, k in STATION_METADATA])
+        finish_val = st.session_state.get(f'{mode}_actual_finish')
+        
+        c1, c2, c3 = st.columns([2, 1, 1])
+        if isinstance(finish_val, tuple):
+             c1.metric("PREDICTED FINISH RANGE", f"{d_to_t(finish_val[0])} - {d_to_t(finish_val[1])}")
+        else:
+             c1.metric("FINISH TIME", d_to_t(finish_val))
+
+        st.markdown("### 🎯 PERFORMANCE BALANCE")
+        rc1, rc2, rc3 = st.columns([1, 4, 1])
+        with rc2: draw_radar_chart(inputs, res.get('targets', {}))
+        
+        st.divider()
+        st.markdown("### ⚡ STATION BREAKDOWN")
+        card_col1, card_col2 = st.columns(2)
+        with card_col1: render_heatmap(gaps_df[gaps_df['Station'].str.contains("Run")], "RUN ENGINE")
+        with card_col2: render_heatmap(gaps_df[~gaps_df['Station'].str.contains("Run")], "STATION POWER")
+
+        if not st.session_state.get('lead_submitted', False):
+            render_lead_form(mode)
+        else:
+            st.divider()
+            pdf_bytes = generate_report_pdf(mode, res, inputs, finish_val)
+            st.download_button(f"📩 DOWNLOAD {mode.upper()} AUDIT (PDF)", data=pdf_bytes, file_name=f"hyrox_{mode}.pdf", mime="application/pdf")
+            st.markdown("### 📊 GLOBAL FIELD COMPARISON")
+            for _, row in gaps_df.iterrows(): 
+                sigma = res['stds'].get(row['Station'], 0.5)
+                draw_distribution(row['Station'], row['Actual'], row['Target'], sigma, f"dist_{mode}_{row['Station'].replace(' ', '_')}")
+
+# --- APP ---
+if "profile_saved" not in st.session_state: st.session_state.profile_saved = False
+if "lead_submitted" not in st.session_state: st.session_state.lead_submitted = False
+
+st.sidebar.markdown("## 👤 ATHLETE PROFILE")
+if not st.session_state.profile_saved:
+    u_email = st.sidebar.text_input("Email", "athlete@grityard.com")
+    u_gender = st.sidebar.selectbox("Gender", ["MALE", "FEMALE"])
+    u_dob = st.sidebar.date_input("DOB", date(1995, 1, 1), min_value=date(1920, 1, 1), max_value=date.today())
+    if st.sidebar.button("SAVE PROFILE"):
+        st.session_state.u_email, st.session_state.u_gender = u_email, u_gender
+        st.session_state.u_age_grp = calculate_age_group(u_dob)
+        st.session_state.profile_saved = True; st.rerun()
+else:
     st.sidebar.info(f"{st.session_state.u_email}\n{st.session_state.u_gender} | {st.session_state.u_age_grp}")
 
 target_window = st.sidebar.selectbox("Benchmark Universe", list(HYROX_STATS.keys()), index=1)
@@ -121,7 +286,6 @@ target_window = st.sidebar.selectbox("Benchmark Universe", list(HYROX_STATS.keys
 st.title("🏃‍♂️ GRITYARD x GRITRox AI")
 st.markdown("*Built by Athletes, Designed for You*")
 st.divider()
-
 for m in ['analysis', 'prediction', 'goal']:
     if f'{m}_results' not in st.session_state: st.session_state[f'{m}_results'] = None
     if f'{m}_inputs' not in st.session_state: st.session_state[f'{m}_inputs'] = None
@@ -301,24 +465,24 @@ if st.session_state.profile_saved:
                 
                 st.divider()
                 
-                # CTA for PT
+                # CTA for online PT
                 st.markdown(f"""
                 <div class="lead-box">
-                    <h2 style="color:{NEON} !important;">🎯 GET PERSONALIZED COACHING</h2>
+                    <h2 style="color:{NEON} !important;">🎯 GET PERSONALIZED ONLINE COACHING</h2>
                     <p style="font-size: 1.1em; margin: 20px 0;">
                         Your analysis reveals <strong>specific areas that need expert attention</strong>. 
-                        Work with GRITYARD's elite coaches through <strong>Personal Training</strong>—
+                        Work 1-on-1 with GRITYARD's elite coaches through our <strong>Online Personal Training</strong> program—
                         designed specifically for GRITRox athletes like you.
                     </p>
                     <p style="font-size: 0.95em; color: rgba(255,255,255,0.7); margin-bottom: 15px;">
                         ✅ Custom GRITRox training programs tailored to YOUR weaknesses<br>
-                        ✅ 1-on-1 coaching sessions (in-person or online)<br>
+                        ✅ Weekly 1-on-1 video coaching sessions<br>
                         ✅ Race strategy & pacing plans<br>
                         ✅ Form checks & technique corrections<br>
                         ✅ Accountability & progress tracking
                     </p>
                     <p style="font-size: 0.85em; color: rgba(255,255,255,0.5); margin-bottom: 20px;">
-                        <em>Train at GRITYARD gym or remotely—with guidance from coaches who've trained competitive athletes.</em>
+                        <em>Train anywhere, anytime—with guidance from coaches who've trained competitive athletes.</em>
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -328,22 +492,13 @@ if st.session_state.profile_saved:
                     st.markdown("#### 📞 SCHEDULE YOUR FREE CONSULTATION")
                     inq_name = st.text_input("Name", value=st.session_state.get('lead_name', ''))
                     inq_contact = st.text_input("WhatsApp / Phone")
-                    
-                    col_goal, col_pref = st.columns(2)
-                    inq_goal = col_goal.selectbox("GRITRox Goal", [
+                    inq_goal = st.selectbox("GRITRox Goal", [
                         "Break 60 minutes",
                         "Break 75 minutes", 
                         "Break 90 minutes",
                         "First race completion",
                         "Podium finish / Elite performance"
                     ])
-                    inq_preference = col_pref.selectbox("Training Preference", [
-                        "In-Person PT at GRITYARD",
-                        "Online PT (Remote)",
-                        "Hybrid (Mix of both)",
-                        "Not sure yet"
-                    ])
-                    
                     inq_availability = st.selectbox("Preferred Session Time", [
                         "Weekday mornings (6-10am)",
                         "Weekday evenings (6-9pm)",
@@ -359,7 +514,7 @@ if st.session_state.profile_saved:
                                 sheet = init_gsheets()
                                 if sheet:
                                     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                                    row = [timestamp, inq_name, inq_contact, inq_goal, inq_preference, inq_availability, inq_notes, "PT_INQUIRY"]
+                                    row = [timestamp, inq_name, inq_contact, inq_goal, inq_availability, inq_notes, "ONLINE_PT_INQUIRY"]
                                     sheet.append_row(row)
                                     st.success("✅ Consultation request received! Our coaching team will contact you within 24 hours to discuss your personalized training plan.")
                             except Exception as e:
@@ -376,7 +531,7 @@ else:
 st.divider()
 st.markdown(f"""
 <div style="text-align: center; padding: 30px; color: rgba(255,255,255,0.6);">
-    <p style="margin-bottom: 10px;">Powered by <strong style="color:{NEON};">GRITYARD</strong> | Personal Training</p>
+    <p style="margin-bottom: 10px;">Powered by <strong style="color:{NEON};">GRITYARD</strong> | Online Personal Training</p>
     <p style="font-size: 0.85em;">676 Geylang Road, Singapore 389603 | contact@grityard.com | +65 9112 6768</p>
     <p style="font-size: 0.85em; margin-top: 10px;">
         <a href="https://www.grityard.com" target="_blank" style="color:{NEON}; text-decoration:none;">Visit GRITYARD.com</a>
@@ -385,169 +540,4 @@ st.markdown(f"""
         GRITRox is a GRITYARD training methodology. Not affiliated with HYROX GmbH.
     </p>
 </div>
-""", unsafe_allow_html=True): return "FOCUS", "badge-focus", COLOR_FOCUS
-
-def get_local_analysis(inputs, gender, bucket):
-    gender_key = gender.lower()
-    stats_group = HYROX_STATS.get(bucket, HYROX_STATS["75-85min"])[gender_key]
-    results = {"targets": {}, "stds": {}}
-    for label, key in STATION_METADATA:
-        mean_val, std_val = stats_group[key]
-        results["targets"][label] = mean_val
-        results["stds"][label] = std_val
-    return results
-
-def generate_report_pdf(mode, results, inputs, finish_time):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, f"GRITYARD x GRITRox - {mode.upper()} REPORT", ln=True, align='C')
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True, align='C')
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, f"ATHLETE: {st.session_state.get('lead_name', 'Athlete')}", ln=True)
-    if isinstance(finish_time, tuple):
-        pdf.cell(0, 10, f"PREDICTED RANGE: {d_to_t(finish_time[0])} - {d_to_t(finish_time[1])}", ln=True)
-    else:
-        pdf.cell(0, 10, f"FINISH TIME: {d_to_t(finish_time)}", ln=True)
-    pdf.ln(5)
-    pdf.set_fill_color(255, 107, 53)
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(50, 10, "STATION", 1, 0, 'C', True)
-    pdf.cell(40, 10, "ACTUAL", 1, 0, 'C', True)
-    pdf.cell(40, 10, "TARGET", 1, 0, 'C', True)
-    pdf.cell(40, 10, "GAP (SEC)", 1, 1, 'C', True)
-    pdf.set_font("Arial", '', 10)
-    for label, key in STATION_METADATA:
-        act = inputs.get(key, 0)
-        trg = results['targets'].get(label, 0)
-        gap = int((act - trg) * 60)
-        pdf.cell(50, 10, label, 1)
-        pdf.cell(40, 10, d_to_t(act), 1, 0, 'C')
-        pdf.cell(40, 10, d_to_t(trg), 1, 0, 'C')
-        pdf.cell(40, 10, f"{gap:+d}s", 1, 1, 'C')
-    return bytes(pdf.output())
-
-# --- VISUALS ---
-def draw_radar_chart(inputs, targets):
-    labels = ["Ski", "Sled P", "Sled L", "Burpees", "Row", "Farmers", "Lunges", "Wall B"]
-    angles = np.linspace(0, 2*np.pi, len(labels), endpoint=False).tolist() + [0]
-    key_map = {"work_1": "Ski Erg", "work_2": "Sled Push", "work_3": "Sled Pull", "work_4": "Burpees", "work_5": "Rowing", "work_6": "Farmers Carry", "work_7": "Sandbag Lunges", "work_8": "Wall Balls"}
-    def get_norm(val, t_val): return np.clip(t_val / val if val > 0 else 0.5, 0.2, 1.2)
-    w_scores = [get_norm(inputs.get(f"work_{i}", 5.0), targets.get(key_map[f"work_{i}"], 5.0)) for i in range(1, 9)] + [get_norm(inputs.get("work_1", 5.0), targets.get("Ski Erg", 5.0))]
-    r_scores = [get_norm(inputs.get(f"run_{i}", 5.0), targets.get(f"Run {i}", 5.0)) for i in range(1, 9)] + [get_norm(inputs.get("run_1", 5.0), targets.get("Run 1", 5.0))]
-    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True), facecolor=DARK_BG)
-    ax.set_facecolor(CARD_BG); ax.spines['polar'].set_color(GRID_COLOR)
-    ax.plot(angles, r_scores, color=RED, linewidth=4, label="RUN ENGINE", marker='o')
-    ax.plot(angles, w_scores, color=CYAN, linewidth=4, label="STATION POWER", marker='s')
-    ax.plot(angles, [1.0]*len(angles), color=NEON, linestyle='--', linewidth=2, label="BENCHMARK")
-    ax.set_xticks(angles[:-1]); ax.set_xticklabels(labels, color='white', size=12, fontweight='bold')
-    ax.set_yticklabels([]); ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), facecolor=CARD_BG, labelcolor='white')
-    st.pyplot(fig); plt.close(fig)
-
-def draw_distribution(station_name, user_val, target_val, sigma, chart_key):
-    num_bins = 45
-    x_bins = np.linspace(target_val - 3.5*sigma, target_val + 3.5*sigma, num_bins)
-    y_bins = norm.pdf(x_bins, target_val, sigma)
-    user_bin_idx = np.abs(x_bins - user_val).argmin()
-    percentile = (1 - norm.cdf(user_val, target_val, sigma)) * 100
-    base_color = RED if "Run" in station_name else CYAN
-    colors = [f"rgba{tuple(int(base_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (0.2,)}" for _ in range(num_bins)]
-    colors[user_bin_idx] = NEON
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=x_bins, y=y_bins, marker=dict(color=colors, line=dict(width=0)), width=(x_bins[1] - x_bins[0]) * 0.9, hovertemplate="<b>Split:</b> %{customdata}<extra></extra>", customdata=[d_to_t(val) for val in x_bins]))
-    fig.add_vline(x=target_val, line_dash="dash", line_color="rgba(255,255,255,0.4)", line_width=1)
-    fig.add_vline(x=user_val, line_color=NEON, line_width=2)
-    fig.update_layout(title=dict(text=f"{station_name.upper()} | TOP {max(0.1, 100-percentile):.1f}%", font=dict(color="white", size=16, weight=900), x=0, y=0.95), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=False, height=350, xaxis=dict(title=dict(text="TIME (MM:SS)", font=dict(color='white')), showgrid=False, ticktext=[d_to_t(val) for val in x_bins[::9]], tickvals=x_bins[::9]), yaxis=dict(showgrid=False, showticklabels=False))
-    st.plotly_chart(fig, use_container_width=True, key=chart_key)
-
-def render_heatmap(df_subset, title):
-    st.markdown(f"#### {title}")
-    for _, row in df_subset.iterrows():
-        gap = row['Gap_Sec']
-        tier_label, badge_class, border_color = get_performance_tier_info(gap)
-        st.markdown(f"""
-        <div class="performance-card" style="border-left: 4px solid {border_color};">
-            <div style="display:flex; justify-content:space-between; align-items:start;">
-                <div><div style="font-size: 0.9em; font-weight: 800; color: white;">{row['Station'].upper()}</div>
-                <div style="font-size: 0.75em; color: rgba(255,255,255,0.4);">Target: {d_to_t(row['Target'])}</div></div>
-                <div style="text-align: right;"><div style="font-size: 1.1em; font-weight: 900; color: {NEON};">{d_to_t(row['Actual'])}</div>
-                <span class="status-badge {badge_class}">{tier_label}</span></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-# --- LEAD MAGNET ---
-def render_lead_form(unique_key):
-    st.markdown(f"""
-    <div class="lead-box">
-        <h2 style="color:{NEON} !important;">🔓 UNLOCK FULL PERFORMANCE AUDIT</h2>
-        <p>Submit your details to see the <b>Deep Comparison</b> and get your <b>Custom PDF Strategy</b>.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    with st.form(f"magnet_form_{unique_key}"):
-        col_n, col_w = st.columns(2)
-        name = col_n.text_input("Full Name")
-        whatsapp = col_w.text_input("WhatsApp Number")
-        struggle = st.text_input("What's your biggest bottleneck in GRITRox? (e.g., running pace, wall balls, transitions)")
-        
-        if st.form_submit_button("GET MY FULL REPORT"):
-            if name and whatsapp:
-                if save_lead_to_sheet(name, whatsapp, struggle):
-                    st.session_state.lead_submitted = True
-                    st.session_state.lead_name = name
-                    st.toast("✅ Analysis Unlocked!", icon='🚀')
-                    st.rerun()
-                else:
-                    st.error("Failed to save. Please try again.")
-
-def render_ui_block(mode):
-    res, inputs = st.session_state[f'{mode}_results'], st.session_state[f'{mode}_inputs']
-    if res and inputs:
-        st.divider()
-        gaps_df = pd.DataFrame([{"Station": l, "Actual": inputs.get(k, 5.0), "Target": res['targets'].get(l, 5.0), "Gap_Sec": (inputs.get(k, 5.0)-res['targets'].get(l, 5.0))*60} for l, k in STATION_METADATA])
-        finish_val = st.session_state.get(f'{mode}_actual_finish')
-        
-        c1, c2, c3 = st.columns([2, 1, 1])
-        if isinstance(finish_val, tuple):
-             c1.metric("PREDICTED FINISH RANGE", f"{d_to_t(finish_val[0])} - {d_to_t(finish_val[1])}")
-        else:
-             c1.metric("FINISH TIME", d_to_t(finish_val))
-
-        st.markdown("### 🎯 PERFORMANCE BALANCE")
-        rc1, rc2, rc3 = st.columns([1, 4, 1])
-        with rc2: draw_radar_chart(inputs, res.get('targets', {}))
-        
-        st.divider()
-        st.markdown("### ⚡ STATION BREAKDOWN")
-        card_col1, card_col2 = st.columns(2)
-        with card_col1: render_heatmap(gaps_df[gaps_df['Station'].str.contains("Run")], "RUN ENGINE")
-        with card_col2: render_heatmap(gaps_df[~gaps_df['Station'].str.contains("Run")], "STATION POWER")
-
-        if not st.session_state.get('lead_submitted', False):
-            render_lead_form(mode)
-        else:
-            st.divider()
-            pdf_bytes = generate_report_pdf(mode, res, inputs, finish_val)
-            st.download_button(f"📩 DOWNLOAD {mode.upper()} AUDIT (PDF)", data=pdf_bytes, file_name=f"gritrox_{mode}.pdf", mime="application/pdf")
-            st.markdown("### 📊 GLOBAL FIELD COMPARISON")
-            for _, row in gaps_df.iterrows(): 
-                sigma = res['stds'].get(row['Station'], 0.5)
-                draw_distribution(row['Station'], row['Actual'], row['Target'], sigma, f"dist_{mode}_{row['Station'].replace(' ', '_')}")
-
-# --- APP ---
-if "profile_saved" not in st.session_state: st.session_state.profile_saved = False
-if "lead_submitted" not in st.session_state: st.session_state.lead_submitted = False
-
-st.sidebar.markdown("## 👤 ATHLETE PROFILE")
-if not st.session_state.profile_saved:
-    u_email = st.sidebar.text_input("Email", "athlete@grityard.com")
-    u_gender = st.sidebar.selectbox("Gender", ["MALE", "FEMALE"])
-    u_dob = st.sidebar.date_input("DOB", date(1995, 1, 1), min_value=date(1920, 1, 1), max_value=date.today())
-    if st.sidebar.button("SAVE PROFILE"):
-        st.session_state.u_email, st.session_state.u_gender = u_email, u_gender
-        st.session_state.u_age_grp = calculate_age_group(u_dob)
-        st.session_state.profile_saved = True; st.rerun()
-else
+""", unsafe_allow_html=True)
