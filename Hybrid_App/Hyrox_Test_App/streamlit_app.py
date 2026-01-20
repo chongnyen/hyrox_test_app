@@ -285,22 +285,17 @@ if "lead_submitted" not in st.session_state: st.session_state.lead_submitted = F
 
 st.sidebar.markdown("## 👤 ATHLETE PROFILE")
 if not st.session_state.profile_saved:
-    <function_calls>
-<invoke name="artifacts">
-<parameter name="command">update</parameter>
-<parameter name="id">gritrox_v20_fixed</parameter>
-<parameter name="new_str">if not st.session_state.profile_saved:
-u_email = st.sidebar.text_input("Email", "athlete@grityard.com")
-u_gender = st.sidebar.selectbox("Gender", ["MALE", "FEMALE"])
-u_dob = st.sidebar.date_input("DOB", date(1995, 1, 1), min_value=date(1920, 1, 1), max_value=date.today())
-if st.sidebar.button("SAVE PROFILE"):
-st.session_state.u_email = u_email
-st.session_state.u_gender = u_gender
-st.session_state.u_age_grp = calculate_age_group(u_dob)
-st.session_state.profile_saved = True
-st.rerun()
+    u_email = st.sidebar.text_input("Email", "athlete@grityard.com")
+    u_gender = st.sidebar.selectbox("Gender", ["MALE", "FEMALE"])
+    u_dob = st.sidebar.date_input("DOB", date(1995, 1, 1), min_value=date(1920, 1, 1), max_value=date.today())
+    if st.sidebar.button("SAVE PROFILE"):
+        st.session_state.u_email = u_email
+        st.session_state.u_gender = u_gender
+        st.session_state.u_age_grp = calculate_age_group(u_dob)
+        st.session_state.profile_saved = True
+        st.rerun()
 else:
-st.sidebar.info(f"{st.session_state.u_email}\n{st.session_state.u_gender} | {st.session_state.u_age_grp}")
+    st.sidebar.info(f"{st.session_state.u_email}\n{st.session_state.u_gender} | {st.session_state.u_age_grp}")
 target_window = st.sidebar.selectbox("Benchmark Universe", list(HYROX_STATS.keys()), index=1)
 st.title("🏃‍♂️ GRITYARD x GRITRox AI")
 st.markdown("Built by Athletes, Designed for You")
