@@ -6,4 +6,6 @@ scipy
 matplotlib
 fpdf2
 gspread
-oauth2client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2

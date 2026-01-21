@@ -9,7 +9,7 @@ import matplotlib
 import io
 from fpdf import FPDF
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # Force Matplotlib to use a non-interactive backend
 matplotlib.use('Agg')
@@ -20,9 +20,12 @@ st.set_page_config(page_title="GRITYARD x GRITRox AI", layout="wide")
 # --- GOOGLE SHEETS SETUP ---
 def init_gsheets():
     try:
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        scope = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
         creds_dict = st.secrets["gcp_service_account"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         sheet = client.open_by_key("15B4rKFV-XL1mMysp-v3maMh_Hj8k064rKDe4CnksQ3Y").sheet1
         return sheet
