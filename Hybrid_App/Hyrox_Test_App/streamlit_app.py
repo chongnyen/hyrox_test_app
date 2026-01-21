@@ -406,11 +406,22 @@ if st.session_state.profile_saved:
     with tab4:
         st.subheader("🤖 AI PERFORMANCE COACH")
         if not st.session_state.lead_submitted:
-            st.warning("⚠️ Complete the Analysis tab first to unlock your AI Coach.")
+            st.warning("⚠️ Complete the Analyser or Predictor tab first to unlock your AI Coach.")
         else:
-            if st.session_state.get('analysis_results') and st.session_state.get('analysis_inputs'):
+        # Check if either analysis OR prediction results exist
+            has_analysis = st.session_state.get('analysis_results') and st.session_state.get('analysis_inputs')
+            has_prediction = st.session_state.get('prediction_results') and st.session_state.get('prediction_inputs')
+        
+        if has_analysis or has_prediction:
+            # Use analysis data if available, otherwise use prediction data
+            if has_analysis:
                 res = st.session_state.analysis_results
                 inputs = st.session_state.analysis_inputs
+                data_source = "race analysis"
+            else:
+                res = st.session_state.prediction_results
+                inputs = st.session_state.prediction_inputs
+                data_source = "predicted performance"
                 
                 run_gaps, work_gaps = [], []
                 for label, key in STATION_METADATA:
@@ -427,6 +438,7 @@ if st.session_state.profile_saved:
                 top_strengths = sorted(all_gaps, key=lambda x: x[1])[:3]
                 
                 st.markdown("### 📊 YOUR PERFORMANCE PROFILE")
+                st.caption(f"*Based on your {data_source}*")
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -561,7 +573,7 @@ if st.session_state.profile_saved:
                         else:
                             st.error("Please fill in your name and contact details.")
             else:
-                st.info("💡 Complete a race analysis in the ANALYSER tab to unlock personalized coaching insights.")
+                st.info("💡 Complete a race analysis in the ANALYSER tab or performance prediction in the PREDICTOR tab to unlock personalized coaching insights.")
 else:
     st.warning("Please complete your profile.")
 
