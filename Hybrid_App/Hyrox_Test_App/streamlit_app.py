@@ -233,7 +233,7 @@ def render_lead_form(unique_key):
         col_n, col_w = st.columns(2)
         name = col_n.text_input("Full Name")
         whatsapp = col_w.text_input("WhatsApp Number")
-        struggle = st.text_input("What's your biggest bottleneck in GRITRox? (e.g., running pace, wall balls, transitions)")
+        struggle = st.text_input("What's your biggest bottleneck in Hyrox? (e.g., running pace, wall balls, transitions)")
         
         if st.form_submit_button("GET MY FULL REPORT"):
             if name and whatsapp:
@@ -328,17 +328,13 @@ if st.session_state.profile_saved:
         
         # Existing tests
         b_run = pc1.text_input("2.4KM RUN (MM:SS)", "09:30")
-        b_ski = pc1.number_input("4-MIN SKI (M)", 850, help="Maximum distance in 4 minutes")
-        b_row = pc1.number_input("4-MIN ROW (M)", 1000, help="Maximum distance in 4 minutes")
-        
-        # Strength tests
-        b_trap = pc2.number_input("7RM TRAPBAR (KG)", 120, help="7-rep max deadlift")
-        b_burp = pc2.number_input("4-MIN BURPEE BJ (REPS)", 55, help="Burpee box jumps in 4 minutes")
-        
-        # NEW: Vertical Jump
-        b_vjump = pc3.number_input("VERTICAL JUMP (CM)", 60, help="Max vertical jump height")
-        
-        rox_in = pc3.text_input("EST. ROX TIME (MM:SS)", "05:00", help="Estimated transition time between stations")
+        b_ski = pc1.number_input("4-MIN SKI (M)", value=850, min_value=0, max_value=None, help="Maximum distance in 4 minutes")
+        b_row = pc1.number_input("4-MIN ROW (M)", value=1000, min_value=0, max_value=None, help="Maximum distance in 4 minutes")
+
+        b_trap = pc2.number_input("7RM TRAPBAR (KG)", value=120, min_value=0, max_value=None, help="7-rep max deadlift")
+        b_burp = pc2.number_input("4-MIN BURPEE BJ (REPS)", value=55, min_value=0, max_value=None, help="Burpee box jumps in 4 minutes")
+
+        b_vjump = pc3.number_input("VERTICAL JUMP (CM)", value=60, min_value=0, max_value=None, help="Max vertical jump height")
         
         if st.button("PREDICT PERFORMANCE"):
             # Running prediction
