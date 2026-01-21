@@ -569,7 +569,9 @@ if st.session_state.profile_saved:
                     
                     if st.form_submit_button("BOOK FREE CONSULTATION"):
                         if inq_name and inq_contact:
-                            if save_pt_inquiry(inq_name, inq_contact, inq_goal, inq_preference, inq_availability, inq_notes):
+                            st.info(f"Attempting to save: {inq_name}, {inq_contact}, {inq_goal}, {inq_preference}, {inq_availability}")  # Debug line
+                            result = save_pt_inquiry(inq_name, inq_contact, inq_goal, inq_preference, inq_availability, inq_notes)
+                            if result:
                                 st.success("✅ Consultation request received! Our coaching team will contact you within 24 hours to discuss your personalized training plan.")
                             else:
                                 st.error("Failed to save inquiry. Please try again.")
