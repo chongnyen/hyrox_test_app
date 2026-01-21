@@ -412,7 +412,7 @@ if st.session_state.profile_saved:
            has_analysis = st.session_state.get('analysis_results') and st.session_state.get('analysis_inputs')
            has_prediction = st.session_state.get('prediction_results') and st.session_state.get('prediction_inputs')
         
-            if has_analysis or has_prediction:
+           if has_analysis or has_prediction:
             # Use analysis data if available, otherwise use prediction data
                 if has_analysis:
                     res = st.session_state.analysis_results
