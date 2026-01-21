@@ -572,8 +572,8 @@ if st.session_state.profile_saved:
                                 st.error("Failed to save inquiry. Please try again.")
                         else:
                             st.error("Please fill in your name and contact details.")
-            else:
-                st.info("💡 Complete a race analysis in the ANALYSER tab or performance prediction in the PREDICTOR tab to unlock personalized coaching insights.")
+        else:
+            st.info("💡 Complete a race analysis in the ANALYSER tab or performance prediction in the PREDICTOR tab to unlock personalized coaching insights.")
 else:
     st.warning("Please complete your profile.")
 
