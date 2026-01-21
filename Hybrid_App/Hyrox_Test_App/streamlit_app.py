@@ -327,25 +327,16 @@ if st.session_state.profile_saved:
         pc1, pc2, pc3 = st.columns(3)
         
         # Existing tests
-        pc1, pc2, pc3 = st.columns(3)
-
-# Existing tests
         b_run = pc1.text_input("2.4KM RUN (MM:SS)", "09:30")
         b_ski = pc1.number_input("4-MIN SKI (M)", value=850, min_value=0, max_value=None, help="Maximum distance in 4 minutes")
         b_row = pc1.number_input("4-MIN ROW (M)", value=1000, min_value=0, max_value=None, help="Maximum distance in 4 minutes")
 
-# Strength tests
         b_trap = pc2.number_input("7RM TRAPBAR (KG)", value=120, min_value=0, max_value=None, help="7-rep max deadlift")
         b_burp = pc2.number_input("4-MIN BURPEE BJ (REPS)", value=55, min_value=0, max_value=None, help="Burpee box jumps in 4 minutes")
 
-# NEW: Vertical Jump
         b_vjump = pc3.number_input("VERTICAL JUMP (CM)", value=60, min_value=0, max_value=None, help="Max vertical jump height")
 
-# Transition time
         rox_in = pc3.text_input("EST. ROX TIME (MM:SS)", "05:00", help="Estimated transition time between stations")
-
-if st.button("PREDICT PERFORMANCE"):
-    # ... rest of the code
         
         if st.button("PREDICT PERFORMANCE"):
             # Running prediction
