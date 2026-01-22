@@ -1,3 +1,36 @@
+st.markdown("""
+    <style>
+    /* Mobile optimizations */
+    @media (max-width: 768px) {
+        .stApp {
+            padding: 10px !important;
+        }
+        .stButton>button {
+            font-size: 14px !important;
+            height: 2.5em !important;
+        }
+        h1 {
+            font-size: 1.5rem !important;
+        }
+        h2, h3 {
+            font-size: 1.2rem !important;
+        }
+        .stTextInput>div>div>input {
+            font-size: 14px !important;
+        }
+        /* Make metrics stack on mobile */
+        div[data-testid="stMetric"] {
+            margin-bottom: 10px !important;
+        }
+    }
+    /* Make iframe responsive */
+    .element-container iframe {
+        width: 100% !important;
+        height: auto !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
