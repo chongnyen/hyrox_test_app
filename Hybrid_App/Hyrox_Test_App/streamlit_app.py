@@ -1,3 +1,23 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from scipy.stats import norm
+from datetime import date, datetime
+import matplotlib.pyplot as plt
+import matplotlib
+import io
+from fpdf import FPDF
+import gspread
+from google.oauth2.service_account import Credentials
+
+# Force Matplotlib to use a non-interactive backend
+matplotlib.use('Agg')
+
+# --- SETTINGS ---
+st.set_page_config(page_title="GRITYARD x GRITRox AI", layout="wide")
+
+# --- MOBILE OPTIMIZATIONS ---
 st.markdown("""
     <style>
     /* Mobile optimizations */
@@ -18,37 +38,12 @@ st.markdown("""
         .stTextInput>div>div>input {
             font-size: 14px !important;
         }
-        /* Make metrics stack on mobile */
         div[data-testid="stMetric"] {
             margin-bottom: 10px !important;
         }
     }
-    /* Make iframe responsive */
-    .element-container iframe {
-        width: 100% !important;
-        height: auto !important;
-    }
     </style>
 """, unsafe_allow_html=True)
-
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-from scipy.stats import norm
-from datetime import date, datetime
-import matplotlib.pyplot as plt
-import matplotlib
-import io
-from fpdf import FPDF
-import gspread
-from google.oauth2.service_account import Credentials
-
-# Force Matplotlib to use a non-interactive backend
-matplotlib.use('Agg')
-
-# --- SETTINGS ---
-st.set_page_config(page_title="GRITYARD x GRITRox AI", layout="wide")
 
 # --- GOOGLE SHEETS SETUP ---
 def init_gsheets():
