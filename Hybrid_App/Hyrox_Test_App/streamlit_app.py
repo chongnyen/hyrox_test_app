@@ -366,7 +366,7 @@ if st.session_state.profile_saved:
         b_burp = pc2.number_input("4-MIN BURPEE BJ (REPS)", value=55, min_value=0, max_value=None, help="Burpee box jumps in 4 minutes")
 
         b_vjump = pc3.number_input("VERTICAL JUMP (CM)", value=60, min_value=0, max_value=None, help="Max vertical jump height")
-
+        b_wallball = pc3.number_input("100 WALL BALLS TIME (SEC)", value=300, min_value=0, max_value=None, help="Time to complete 100 wall balls in seconds")
         rox_in = pc3.text_input("EST. ROX TIME (MM:SS)", "05:00", help="Estimated transition time between stations")
         
         if st.button("PREDICT PERFORMANCE"):
@@ -391,7 +391,7 @@ if st.session_state.profile_saved:
                 "work_5": (1000 / (b_row / 4)) * 1.10,  # Rowing
                 "work_6": max(1.5, 2.8 - ((vj_factor - 1.0) * 0.3)),  # Farmers Carry - slight benefit
                 "work_7": max(3.5, 6.5 - ((vj_factor - 1.0) * 0.6)),  # Lunges - benefits from leg power
-                "work_8": max(3.0, 6.5 - ((vj_factor - 1.0) * 0.7)),  # Wall Balls - highly correlated with VJ
+                "work_8": max(2.5, (b_wallball / 60 / 100) * 50 * 1.15),  # Wall Balls - based on actual test + fatigue factor,  # Wall Balls - highly correlated with VJ
             })
             
             st.session_state.prediction_results = get_local_analysis(sim, st.session_state.u_gender, target_window)
